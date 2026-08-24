@@ -13,8 +13,12 @@
 		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
 		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 		// The worker now fails closed outside local development if Access is not configured.
-		"DOMAINS": "timelinevisualizer.net",
-		"EMAIL_ADDRESSES": []
+		"DOMAINS": "timelinevisualizer.net,elfnames.wiki",
+		"EMAIL_ADDRESSES": [
+			"support@timelinevisualizer.net",
+			"hi@elfnames.wiki",
+			"support@elfnames.wiki"
+		]
 	},
 	"send_email": [
 		{
