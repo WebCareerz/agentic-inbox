@@ -7,6 +7,7 @@ import { FloppyDiskIcon, PaperPlaneTiltIcon, XIcon } from "@phosphor-icons/react
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
+import ImportEmailJson from "./ImportEmailJson";
 
 export default function ComposePanel() {
 	const { mailboxId, folder } = useParams<{
@@ -33,6 +34,7 @@ export default function ComposePanel() {
 		formTitle,
 		handleSaveDraft,
 		handleSend,
+		importFromJson,
 		closeCompose,
 		closePanel,
 	} = useComposeForm(mailboxId, folder);
@@ -62,6 +64,8 @@ export default function ComposePanel() {
 			>
 				<div className="p-4 md:p-6 space-y-4">
 					{error && <Banner variant="error" text={error} />}
+
+					<ImportEmailJson onImport={importFromJson} disabled={isSending} />
 
 					<div className="space-y-3">
 						<div className="flex items-center gap-2">

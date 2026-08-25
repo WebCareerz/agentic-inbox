@@ -7,6 +7,7 @@ import { FloppyDiskIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
+import ImportEmailJson from "./ImportEmailJson";
 import { useUIStore } from "~/hooks/useUIStore";
 
 export default function ComposeEmail() {
@@ -36,6 +37,7 @@ export default function ComposeEmail() {
 		formTitle,
 		handleSaveDraft,
 		handleSend,
+		importFromJson,
 	} = useComposeForm(mailboxId, folder);
 
 	return (
@@ -49,6 +51,7 @@ export default function ComposeEmail() {
 				</Dialog.Title>
 				<form onSubmit={(e) => handleSend(e, closeComposeModal)} className="space-y-4">
 					{error && <Banner variant="error" text={error} />}
+					<ImportEmailJson onImport={importFromJson} disabled={isSending} />
 					<div className="flex items-center gap-2">
 						<div className="flex-1">
 							<Input

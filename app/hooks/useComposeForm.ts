@@ -17,6 +17,7 @@ import {
 import { useDeleteEmail, useForwardEmail, useReplyToEmail, useSaveDraft, useSendEmail } from "~/queries/emails";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
+import { parseImportedEmail } from "~/lib/import-email";
 
 function appendUniqueAddress(
 	addresses: string[],
@@ -262,5 +263,23 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSending(false); }
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
+	/** Fill the form from a pasted JSON object ({ to, subject, body, cc?, bcc? }). Returns an error message or null. */
+	const importFromJson = (raw: string): string | null => {
+		try {
+			const imported = parseImportedEmail(raw);
+			if (imported.to) setTo(imported.to);
+			if (imported.cc) setCc(imported.cc);
+			if (imported.bcc) setBcc(imported.bcc);
+			if (imported.cc || imported.bcc) setShowCcBcc(true);
+			if (imported.subject) setSubject(imported.subject);
+			if (imported.body) setBody(imported.body);
+			setError(null);
+			toastManager.add({ title: "Email imported" });
+			return null;
+		} catch (err: unknown) {
+			return (err instanceof Error ? err.message : null) || "Failed to import email.";
+		}
+	};
+
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, importFromJson, closeCompose, closePanel };
 }
