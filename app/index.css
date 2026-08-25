@@ -25,3 +25,17 @@ body {
   margin-top: 0.25em;
   margin-bottom: 0.25em;
 }
+
+/* TipTap paragraph / link styles (no typography plugin, so `prose` is a no-op) */
+.ProseMirror p {
+  margin: 0 0 0.75em;
+}
+
+.ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+
+.ProseMirror a {
+  color: var(--text-color-kumo-link, #0051c3);
+  text-decoration: underline;
+}
