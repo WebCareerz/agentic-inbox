@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
+import ImportDraftsButton from "~/components/ImportDraftsButton";
 import MailboxSplitView from "~/components/MailboxSplitView";
 import { getSnippetText } from "~/lib/utils";
 import {
@@ -283,6 +284,9 @@ export default function EmailListRoute() {
 							<span className="text-sm text-kumo-subtle mr-2 hidden sm:inline">
 								{totalCount} conversation{totalCount !== 1 ? "s" : ""}
 							</span>
+						)}
+						{folder === Folders.DRAFT && mailboxId && (
+							<ImportDraftsButton mailboxId={mailboxId} />
 						)}
 						<Tooltip
 							content={isRefreshing ? "Refreshing..." : "Refresh"}

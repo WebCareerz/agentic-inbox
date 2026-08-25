@@ -50,12 +50,20 @@ export function parseImportedEmail(raw: string): ImportedEmail {
 	if (Array.isArray(data)) data = data[0];
 	if (!data || typeof data !== "object") throw new Error("JSON must be an object with to / subject / body fields.");
 
-	const obj = data as Record<string, unknown>;
+	return importOne(data as Record<string, unknown>);
+}
+
+export interface ImportedEmailBatch {
+	emails: ImportedEmail[];
+	/** Per-item errors, keyed by array index (0-based) or the item's `id` if present. */
+	errors: { index: number; id?: string; message: string }[];
+}
+
+function importOne(obj: Record<string, unknown>): ImportedEmail {
 	const to = toAddressList(obj.to);
 	const subject = typeof obj.subject === "string" ? obj.subject.trim() : "";
 	const bodyRaw = typeof obj.body === "string" ? obj.body : "";
-	if (!to && !subject && !bodyRaw) throw new Error("No to / subject / body fields found in the JSON.");
-
+	if (!to && !subject && !bodyRaw) throw new Error("No to / subject / body fields found.");
 	const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(bodyRaw);
 	return {
 		to,
@@ -64,4 +72,34 @@ export function parseImportedEmail(raw: string): ImportedEmail {
 		subject,
 		body: looksLikeHtml ? bodyRaw : plainTextToHtml(bodyRaw),
 	};
+}
+
+/**
+ * Parse a JSON file containing an array of { to, subject, body, ... } objects
+ * (a single object is also accepted). Invalid items are reported in `errors`
+ * instead of aborting the whole batch.
+ */
+export function parseImportedEmails(raw: string): ImportedEmailBatch {
+	let data: unknown;
+	try {
+		data = JSON.parse(raw.trim());
+	} catch {
+		throw new Error("Invalid JSON file.");
+	}
+	const items = Array.isArray(data) ? data : [data];
+	if (items.length === 0) throw new Error("The JSON array is empty.");
+
+	const batch: ImportedEmailBatch = { emails: [], errors: [] };
+	items.forEach((item, index) => {
+		const id = item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string"
+			? ((item as Record<string, unknown>).id as string)
+			: undefined;
+		try {
+			if (!item || typeof item !== "object") throw new Error("Item is not an object.");
+			batch.emails.push(importOne(item as Record<string, unknown>));
+		} catch (err: unknown) {
+			batch.errors.push({ index, id, message: err instanceof Error ? err.message : "Invalid item." });
+		}
+	});
+	return batch;
 }
