@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
+import { Badge, Button, Dialog, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
 import { DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
@@ -24,11 +24,13 @@ export default function CrmContacts() {
 	const [newEmail, setNewEmail] = useState("");
 	const [bulkOpen, setBulkOpen] = useState(false);
 	const [includeCorporate, setIncludeCorporate] = useState(false);
+	const [confirmOpen, setConfirmOpen] = useState(false);
 	const upsert = useUpsertContact();
 	const importMailboxes = useImportFromMailboxes();
 	const toast = useKumoToastManager();
 
 	const runImport = async () => {
+		setConfirmOpen(false);
 		try {
 			const r = await importMailboxes.mutateAsync({ includeCorporate });
 			toast.add({
@@ -73,11 +75,7 @@ export default function CrmContacts() {
 					<Input size="sm" placeholder="Search email or name" value={q} onChange={(e) => setQ(e.target.value)} />
 				</div>
 				<div className="flex items-center gap-2 ml-auto">
-					<label className="flex items-center gap-1.5 text-xs text-kumo-subtle cursor-pointer select-none">
-						<input type="checkbox" checked={includeCorporate} onChange={(e) => setIncludeCorporate(e.target.checked)} />
-						include corporate
-					</label>
-					<Button type="button" size="sm" variant="secondary" icon={<DownloadSimpleIcon size={14} />} onClick={runImport} loading={importMailboxes.isPending}>
+					<Button type="button" size="sm" variant="secondary" icon={<DownloadSimpleIcon size={14} />} onClick={() => setConfirmOpen(true)} loading={importMailboxes.isPending}>
 						Import from mailboxes
 					</Button>
 					<Button type="button" size="sm" variant="secondary" icon={<UploadSimpleIcon size={14} />} onClick={() => setBulkOpen(true)}>
@@ -139,6 +137,29 @@ export default function CrmContacts() {
 			)}
 
 			<ImportContactsDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />
+
+			<Dialog.Root open={confirmOpen} onOpenChange={(o) => !o && setConfirmOpen(false)}>
+				<Dialog size="base" className="p-6">
+					<Dialog.Title className="text-lg font-semibold mb-2">Import contacts from mailboxes?</Dialog.Title>
+					<div className="space-y-3 text-sm text-kumo-strong">
+						<p>This scans the Inbox, Sent and Archive folders of <strong>every mailbox</strong> and creates a contact for each address you have exchanged email with.</p>
+						<ul className="list-disc pl-5 space-y-1 text-kumo-subtle">
+							<li>Only personal addresses (Gmail, Naver, iCloud…) are added by default; automated senders are always skipped.</li>
+							<li>New contacts start as <em>Unclassified</em> — you still choose Paid / Free.</li>
+							<li>Safe to re-run: existing contacts are updated, nothing is duplicated.</li>
+							<li>Large mailboxes may take a while; the page waits until it finishes.</li>
+						</ul>
+						<label className="flex items-center gap-2 text-sm text-kumo-default cursor-pointer select-none pt-1">
+							<input type="checkbox" checked={includeCorporate} onChange={(e) => setIncludeCorporate(e.target.checked)} />
+							Also add corporate / custom-domain addresses
+						</label>
+					</div>
+					<div className="flex justify-end gap-2 pt-5">
+						<Button type="button" variant="ghost" size="sm" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+						<Button type="button" variant="primary" size="sm" icon={<DownloadSimpleIcon size={14} />} onClick={runImport}>Start import</Button>
+					</div>
+				</Dialog>
+			</Dialog.Root>
 		</div>
 	);
 }
