@@ -3,13 +3,14 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api from "~/services/api";
+import api, { ApiError } from "~/services/api";
 import type { CrmTask } from "~/types";
 
 export const crmKeys = {
 	all: ["crm"] as const,
 	contacts: (params: Record<string, string>) => ["crm", "contacts", params] as const,
 	contact: (id: string) => ["crm", "contact", id] as const,
+	contactByEmail: (email: string) => ["crm", "contact-by-email", email] as const,
 	tasks: (params: Record<string, string>) => ["crm", "tasks", params] as const,
 };
 
@@ -28,6 +29,23 @@ export function useCrmContacts(params: Record<string, string>) {
 
 export function useCrmContact(id: string | undefined) {
 	return useQuery({ queryKey: crmKeys.contact(id ?? ""), queryFn: () => api.crmGetContact(id!), enabled: !!id });
+}
+
+/** Contact + open tasks for an email address; resolves to null when no contact exists. */
+export function useCrmContactByEmail(email: string | undefined) {
+	const key = (email ?? "").trim().toLowerCase();
+	return useQuery({
+		queryKey: crmKeys.contactByEmail(key),
+		queryFn: async () => {
+			try {
+				return await api.crmGetContactByEmail(key);
+			} catch (e) {
+				if (e instanceof ApiError && e.status === 404) return null;
+				throw e;
+			}
+		},
+		enabled: !!key,
+	});
 }
 
 export function useCrmTasks(params: Record<string, string>) {

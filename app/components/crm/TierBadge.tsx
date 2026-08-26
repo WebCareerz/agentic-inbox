@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { CheckSquareIcon, CrownSimpleIcon } from "@phosphor-icons/react";
+import { CheckSquareIcon, CrownSimpleIcon, UserIcon } from "@phosphor-icons/react";
 
 export const TIER_LABELS: Record<string, string> = { paid: "Paid", free: "Free", unknown: "Unclassified" };
 
@@ -15,6 +15,14 @@ export default function TierBadge({ tier, size = "sm" }: { tier?: string | null;
 			<span className={`inline-flex items-center gap-1 rounded-full bg-amber-500 text-white font-semibold uppercase tracking-wide shrink-0 ${base}`}>
 				<CrownSimpleIcon size={size === "md" ? 12 : 10} weight="fill" />
 				Paid
+			</span>
+		);
+	}
+	if (tier === "free") {
+		return (
+			<span className={`inline-flex items-center gap-1 rounded-full bg-slate-500 text-white font-semibold uppercase tracking-wide shrink-0 ${base}`}>
+				<UserIcon size={size === "md" ? 12 : 10} weight="fill" />
+				Free
 			</span>
 		);
 	}

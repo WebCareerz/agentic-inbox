@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon, ArrowDownLeftIcon, ArrowUpRightIcon, CheckIcon, ChatsCircleIcon, CrownSimpleIcon, UserIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, ArrowDownLeftIcon, ArrowUpRightIcon, CheckIcon, CheckSquareIcon, ChatsCircleIcon, CrownSimpleIcon, NotePencilIcon, PlusSquareIcon, UserIcon, XSquareIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useParams } from "react-router";
 import { formatListDate } from "shared/dates";
@@ -53,6 +53,33 @@ function buildTimeline(activities: CrmActivity[]): TimelineItem[] {
 		t.subject = first.summary.replace(/^(Received|Sent):\s*/, "").replace(/^(re|fwd?):\s*/i, "").trim() || "(no subject)";
 	}
 	return items.sort((x, y) => (x.at > y.at ? -1 : 1));
+}
+
+/** Leading icon for a timeline entry, colour-coded by activity type. */
+function ActivityIcon({ type, summary }: { type: string; summary?: string }) {
+	let icon: React.ReactNode;
+	let cls = "bg-kumo-tint text-kumo-subtle";
+	switch (type) {
+		case "thread":
+			icon = <ChatsCircleIcon size={15} weight="fill" />; cls = "bg-sky-100 text-sky-700"; break;
+		case "email_in":
+			icon = <ArrowDownLeftIcon size={15} weight="bold" />; cls = "bg-sky-100 text-sky-700"; break;
+		case "email_out":
+			icon = <ArrowUpRightIcon size={15} weight="bold" />; cls = "bg-kumo-tint text-kumo-strong"; break;
+		case "tier_change":
+			if (/→ paid|set: paid/.test(summary ?? "")) { icon = <CrownSimpleIcon size={15} weight="fill" />; cls = "bg-amber-100 text-amber-700"; }
+			else { icon = <UserIcon size={15} weight="fill" />; cls = "bg-kumo-tint text-kumo-strong"; }
+			break;
+		case "task_created":
+			icon = <PlusSquareIcon size={15} weight="fill" />; cls = "bg-violet-100 text-violet-700"; break;
+		case "task_done":
+			icon = <CheckSquareIcon size={15} weight="fill" />; cls = "bg-emerald-100 text-emerald-700"; break;
+		case "task_cancelled":
+			icon = <XSquareIcon size={15} weight="fill" />; cls = "bg-rose-100 text-rose-700"; break;
+		default:
+			icon = <NotePencilIcon size={15} weight="fill" />;
+	}
+	return <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${cls}`}>{icon}</span>;
 }
 
 export default function CrmContactDetail() {
@@ -160,13 +187,14 @@ export default function CrmContactDetail() {
 						<ul className="divide-y divide-kumo-line">
 							{timeline.map((item) =>
 								item.kind === "thread" ? (
-									<li key={item.key} className="px-5 py-3 text-sm">
+									<li key={item.key} className="flex items-start gap-3 px-5 py-3 text-sm">
+										<ActivityIcon type={item.messages.length === 1 ? item.messages[0].type : "thread"} />
+										<div className="min-w-0 flex-1">
 										<div className="flex items-center gap-2 min-w-0">
-											<ChatsCircleIcon size={16} className="text-kumo-subtle shrink-0" />
 											<span className="font-medium text-kumo-default truncate">{item.subject}</span>
 											<span className="text-xs text-kumo-subtle shrink-0">{item.messages.length} message{item.messages.length === 1 ? "" : "s"} · {formatListDate(item.at)}</span>
 										</div>
-										<ul className="mt-1.5 ml-6 space-y-1">
+										<ul className="mt-1.5 space-y-1">
 											{item.messages.map((m) => {
 												const link = emailLink(m.parsed);
 												const label = m.type === "email_in" ? "Received" : "Sent";
@@ -189,18 +217,20 @@ export default function CrmContactDetail() {
 												);
 											})}
 										</ul>
+										</div>
 									</li>
 								) : (
-									<li key={item.key} className="px-5 py-2.5 text-sm">
+									<li key={item.key} className="flex items-start gap-3 px-5 py-2.5 text-sm">
+										<ActivityIcon type={item.activity.type} summary={item.activity.summary} />
 										{(() => {
 											const link = emailLink(item.parsed);
 											const body = (
-												<>
+												<div className="min-w-0 flex-1">
 													<div className="text-kumo-default">{item.activity.summary}</div>
 													<div className="text-xs text-kumo-subtle">{item.activity.type.replace(/_/g, " ")} · {formatListDate(item.activity.created_at)}</div>
-												</>
+												</div>
 											);
-											return link ? <RouterLink to={link} className="block no-underline hover:underline">{body}</RouterLink> : body;
+											return link ? <RouterLink to={link} className="block min-w-0 flex-1 no-underline hover:underline">{body}</RouterLink> : body;
 										})()}
 									</li>
 								),

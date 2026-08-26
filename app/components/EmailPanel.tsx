@@ -11,6 +11,7 @@ import EmailPanelHeader from "~/components/email-panel/EmailPanelHeader";
 import EmailPanelToolbar from "~/components/email-panel/EmailPanelToolbar";
 import SingleMessageView from "~/components/email-panel/SingleMessageView";
 import ThreadMessage from "~/components/email-panel/ThreadMessage";
+import CustomerCard from "~/components/crm/CustomerCard";
 import { splitEmailList, toEmailListValue } from "~/lib/utils";
 import api from "~/services/api";
 import { useDeleteEmail, useEmail, useMoveEmail, useReplyToEmail, useSendEmail, useThreadReplies, useUpdateEmail } from "~/queries/emails";
@@ -139,6 +140,13 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const hasThread = allMessages.length > 1;
 
+	// External party for the CRM card: server-decorated when available, otherwise derived.
+	const selfEmail = currentMailbox?.email?.toLowerCase();
+	const externalEmail = email.contact_email
+		|| allMessages.map((m) => (m.sender || "").toLowerCase()).find((a) => a && a !== selfEmail)
+		|| splitEmailList(email.recipient).map((a) => a.toLowerCase()).find((a) => a !== selfEmail)
+		|| "";
+
 	return (
 		<div className="flex flex-col h-full">
 			<EmailPanelToolbar
@@ -180,6 +188,14 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				messageCount={allMessages.length}
 				showThreadCount={hasThread}
 			/>
+
+			{externalEmail && !isDraftFolder && (
+				<CustomerCard
+					email={externalEmail}
+					mailboxId={mailboxId}
+					emailId={lastReceivedMessage?.id ?? email.id}
+				/>
+			)}
 
 			<div className="flex-1 overflow-y-auto">
 				{hasThread ? (

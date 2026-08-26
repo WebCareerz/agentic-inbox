@@ -174,6 +174,8 @@ const api = {
 		get<{ contacts: CrmContactSummary[]; total: number }>("/api/v1/crm/contacts", { params }),
 	crmGetContact: (id: string) =>
 		get<{ contact: CrmContact; tasks: CrmTask[]; activities: CrmActivity[] }>(`/api/v1/crm/contacts/${id}`),
+	crmGetContactByEmail: (email: string) =>
+		get<CrmContact & { open_tasks: CrmTask[] }>(`/api/v1/crm/contacts/by-email/${encodeURIComponent(email)}`),
 	crmLookupContacts: (emails: string[]) =>
 		get<Record<string, { id: string; tier: string; email_kind: string; name: string | null }>>("/api/v1/crm/contacts/lookup", { params: { emails: emails.join(",") } }),
 	crmUpsertContact: (body: { email: string; tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) =>
