@@ -194,6 +194,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					email={externalEmail}
 					mailboxId={mailboxId}
 					emailId={lastReceivedMessage?.id ?? email.id}
+					subject={email.subject}
 				/>
 			)}
 

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
 import AddContactDialog from "~/components/crm/AddContactDialog";
+import ConfirmDialog, { type ConfirmRequest } from "~/components/crm/ConfirmDialog";
 import ImportContactsDialog from "~/components/crm/ImportContactsDialog";
 import TierBadge from "~/components/crm/TierBadge";
 import { useBulkUpsertContacts, useCrmContacts, useImportFromMailboxes } from "~/queries/crm";
@@ -57,16 +58,28 @@ export default function CrmContacts() {
 	const toggleAll = () => setSelected(allSelected ? new Set() : new Set(contacts.map((c) => c.email)));
 	const toggleOne = (email: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(email)) next.delete(email); else next.add(email); return next; });
 
-	const applyTier = async (next: "free" | "paid") => {
+	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+
+	const applyTier = (next: "free" | "paid") => {
 		const emails = [...selected];
 		if (emails.length === 0) return;
-		try {
-			const r = await bulk.mutateAsync(emails.map((email) => ({ email, tier: next })));
-			toast.add({ title: `${r.created + r.updated} contact${r.created + r.updated === 1 ? "" : "s"} marked as ${next}` });
-			setSelected(new Set());
-		} catch (e) {
-			toast.add({ title: (e as Error).message || "Update failed", variant: "error" });
-		}
+		setConfirm({
+			title: `Mark ${emails.length} contact${emails.length === 1 ? "" : "s"} as ${next}?`,
+			description: (
+				<>
+					<p>Their tier will be set to <strong>{next}</strong>. Existing names and notes are kept.</p>
+					<ul className="mt-2 max-h-40 overflow-y-auto rounded-md border border-kumo-line bg-kumo-tint/40 p-2 text-xs text-kumo-subtle space-y-0.5">
+						{emails.map((e) => <li key={e} className="truncate">{e}</li>)}
+					</ul>
+				</>
+			),
+			confirmLabel: `Mark as ${next}`,
+			onConfirm: async () => {
+				const r = await bulk.mutateAsync(emails.map((email) => ({ email, tier: next })));
+				toast.add({ title: `${r.created + r.updated} contact${r.created + r.updated === 1 ? "" : "s"} marked as ${next}` });
+				setSelected(new Set());
+			},
+		});
 	};
 
 	return (
@@ -159,6 +172,7 @@ export default function CrmContacts() {
 				</div>
 			)}
 
+			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 			<AddContactDialog open={addOpen} onClose={() => setAddOpen(false)} />
 			<ImportContactsDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />
 

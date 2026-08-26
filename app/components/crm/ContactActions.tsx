@@ -2,10 +2,12 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Button, Tooltip, useKumoToastManager } from "@cloudflare/kumo";
-import { CheckSquareIcon, CrownSimpleIcon, UserIcon } from "@phosphor-icons/react";
+import { Button, Tooltip } from "@cloudflare/kumo";
+import { PencilSimpleIcon, PlusIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 import { Link as RouterLink } from "react-router";
-import { useCreateTask, useUpsertContact } from "~/queries/crm";
+import ContactDialog from "./ContactDialog";
+import TaskDialog, { type TaskDialogState } from "./TaskDialog";
 import TierBadge from "./TierBadge";
 
 interface ContactActionsProps {
@@ -14,78 +16,36 @@ interface ContactActionsProps {
 	name?: string | null;
 	tier?: string | null;
 	contactId?: string | null;
-	hasOpenTask?: boolean;
 	mailboxId?: string;
 	emailId?: string;
+	/** Default title for a task created from this message. */
+	subject?: string | null;
 }
 
 /**
- * Inline CRM controls shown next to a sender in the thread view:
- * tier badge, quick "Paid / Free" toggle, and "Add task".
+ * Inline CRM controls next to a sender in the thread view: tier badge,
+ * view/edit contact (dialog), new task (dialog), link to the CRM page.
  */
-export default function ContactActions({ email, name, tier, contactId, hasOpenTask, mailboxId, emailId }: ContactActionsProps) {
-	const toast = useKumoToastManager();
-	const upsert = useUpsertContact();
-	const createTask = useCreateTask();
-
-	const setTier = async (next: "paid" | "free") => {
-		try {
-			await upsert.mutateAsync({ email, tier: next, ...(name ? { name } : {}) });
-			toast.add({ title: `${email} marked as ${next}` });
-		} catch (e) {
-			toast.add({ title: (e as Error).message || "Failed to update contact", variant: "error" });
-		}
-	};
-
-	const addTask = async () => {
-		try {
-			await createTask.mutateAsync({ mailboxId, emailId, contact_email: email });
-			toast.add({ title: "Task created" });
-		} catch (e) {
-			toast.add({ title: (e as Error).message || "Failed to create task", variant: "error" });
-		}
-	};
-
-	const busy = upsert.isPending || createTask.isPending;
+export default function ContactActions({ email, name, tier, contactId, mailboxId, emailId, subject }: ContactActionsProps) {
+	const [contactOpen, setContactOpen] = useState(false);
+	const [taskDialog, setTaskDialog] = useState<TaskDialogState>(null);
 
 	return (
 		<div className="flex items-center gap-1 flex-wrap">
 			<TierBadge tier={tier} />
-			<Tooltip content={tier === "paid" ? "Paid customer" : "Mark as paid customer"} side="bottom" asChild>
-				<Button
-					type="button"
-					variant={tier === "paid" ? "secondary" : "ghost"}
-					shape="square"
-					size="xs"
-					icon={<CrownSimpleIcon size={14} weight={tier === "paid" ? "fill" : "regular"} />}
-					onClick={() => setTier("paid")}
-					disabled={busy || tier === "paid"}
-					aria-label="Mark as paid"
-				/>
-			</Tooltip>
-			<Tooltip content={tier === "free" ? "Free user" : "Mark as free user"} side="bottom" asChild>
-				<Button
-					type="button"
-					variant={tier === "free" ? "secondary" : "ghost"}
-					shape="square"
-					size="xs"
-					icon={<UserIcon size={14} weight={tier === "free" ? "fill" : "regular"} />}
-					onClick={() => setTier("free")}
-					disabled={busy || tier === "free"}
-					aria-label="Mark as free"
-				/>
+			<Tooltip content={contactId ? "View / edit customer" : "Add as customer"} side="bottom" asChild>
+				<Button type="button" variant="ghost" shape="square" size="xs" icon={<PencilSimpleIcon size={14} />} onClick={() => setContactOpen(true)} aria-label="View or edit customer" />
 			</Tooltip>
 			{mailboxId && emailId && (
-				<Tooltip content={hasOpenTask ? "Add another task" : "Add to tasks"} side="bottom" asChild>
+				<Tooltip content="New task from this message" side="bottom" asChild>
 					<Button
 						type="button"
-						variant={hasOpenTask ? "secondary" : "ghost"}
+						variant="ghost"
 						shape="square"
 						size="xs"
-						icon={<CheckSquareIcon size={14} weight={hasOpenTask ? "fill" : "regular"} />}
-						onClick={addTask}
-						disabled={busy}
-						aria-label="Add task"
+						icon={<PlusIcon size={14} />}
+						onClick={() => setTaskDialog({ mode: "create", contactEmail: email, mailboxId, emailId, defaultTitle: subject ?? null })}
+						aria-label="New task"
 					/>
 				</Tooltip>
 			)}
@@ -94,6 +54,8 @@ export default function ContactActions({ email, name, tier, contactId, hasOpenTa
 					CRM
 				</RouterLink>
 			)}
+			<ContactDialog email={contactOpen ? email : null} name={name} onClose={() => setContactOpen(false)} />
+			<TaskDialog state={taskDialog} onClose={() => setTaskDialog(null)} />
 		</div>
 	);
 }

@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink, useParams } from "react-router";
 import { formatListDate } from "shared/dates";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "~/components/crm/CompleteTaskDialog";
+import ConfirmDialog, { type ConfirmRequest } from "~/components/crm/ConfirmDialog";
+import TaskDialog, { type TaskDialogState } from "~/components/crm/TaskDialog";
 import TierBadge from "~/components/crm/TierBadge";
 import { taskEmailLink, useCrmContact, useUpdateContact } from "~/queries/crm";
 import type { CrmActivity, CrmTask } from "~/types";
@@ -90,6 +92,8 @@ export default function CrmContactDetail() {
 	const [name, setName] = useState("");
 	const [notes, setNotes] = useState("");
 	const [completing, setCompleting] = useState<CrmTask | null>(null);
+	const [editing, setEditing] = useState<TaskDialogState>(null);
+	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
 	useEffect(() => {
 		if (data) {
@@ -103,10 +107,12 @@ export default function CrmContactDetail() {
 	const { contact, tasks, activities } = data;
 	const timeline = buildTimeline(activities);
 
-	const setTier = async (tier: "paid" | "free" | "unknown") => {
-		await update.mutateAsync({ id: contact.id, tier });
-		toast.add({ title: `Marked as ${tier}` });
-	};
+	const setTier = (tier: "paid" | "free" | "unknown") => setConfirm({
+		title: tier === "unknown" ? "Clear tier?" : `Mark as ${tier}?`,
+		description: <>{contact.name || contact.email} → <strong>{tier === "unknown" ? "Unclassified" : tier}</strong>. Recorded in the timeline.</>,
+		confirmLabel: tier === "unknown" ? "Clear" : `Mark as ${tier}`,
+		onConfirm: async () => { await update.mutateAsync({ id: contact.id, tier }); toast.add({ title: `Marked as ${tier}` }); },
+	});
 	const saveDetails = async () => {
 		await update.mutateAsync({ id: contact.id, name: name.trim() || null, notes: notes.trim() || null });
 		toast.add({ title: "Contact saved" });
@@ -167,7 +173,7 @@ export default function CrmContactDetail() {
 						<p className="px-5 py-4 text-sm text-kumo-subtle">Nothing open.</p>
 					) : (
 						<ul className="divide-y divide-kumo-line">
-							{openTasks.map((t) => <TaskRow key={t.id} task={t} onComplete={() => setCompleting(t)} />)}
+							{openTasks.map((t) => <TaskRow key={t.id} task={t} onComplete={() => setCompleting(t)} onEdit={() => setEditing({ mode: "edit", task: t })} />)}
 						</ul>
 					)}
 				</section>
@@ -175,7 +181,7 @@ export default function CrmContactDetail() {
 					<section className="rounded-xl border border-kumo-line bg-kumo-base">
 						<h3 className="px-5 py-3 text-sm font-semibold text-kumo-default border-b border-kumo-line">Closed tasks ({closedTasks.length})</h3>
 						<ul className="divide-y divide-kumo-line">
-							{closedTasks.map((t) => <TaskRow key={t.id} task={t} />)}
+							{closedTasks.map((t) => <TaskRow key={t.id} task={t} onEdit={() => setEditing({ mode: "edit", task: t })} />)}
 						</ul>
 					</section>
 				)}
@@ -241,17 +247,19 @@ export default function CrmContactDetail() {
 			</div>
 
 			<CompleteTaskDialog task={completing} onClose={() => setCompleting(null)} />
+			<TaskDialog state={editing} onClose={() => setEditing(null)} />
+			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 		</div>
 	);
 }
 
-function TaskRow({ task, onComplete }: { task: CrmTask; onComplete?: () => void }) {
+function TaskRow({ task, onComplete, onEdit }: { task: CrmTask; onComplete?: () => void; onEdit?: () => void }) {
 	const link = taskEmailLink(task);
 	const resolution = RESOLUTION_OPTIONS.find((o) => o.value === task.resolution_type)?.label;
 	return (
 		<li className="flex items-center gap-3 px-5 py-2.5">
 			<div className="flex-1 min-w-0">
-				<div className={`text-sm truncate ${task.status === "open" ? "text-kumo-default" : "text-kumo-subtle line-through"}`}>{task.title}</div>
+				<button type="button" onClick={onEdit} className={`block w-full text-left text-sm truncate hover:underline ${task.status === "open" ? "text-kumo-default" : "text-kumo-subtle line-through"}`} title="Edit task">{task.title}</button>
 				<div className="text-xs text-kumo-subtle">
 					{formatListDate(task.created_at)}
 					{task.status === "done" && resolution ? ` · ${resolution}${task.resolution_note ? `: ${task.resolution_note}` : ""}` : ""}

@@ -3,11 +3,13 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Button, Loader, Tooltip, useKumoToastManager } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon, ArrowCounterClockwiseIcon, CheckIcon, CheckSquareIcon, TrashIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, ArrowCounterClockwiseIcon, CheckIcon, CheckSquareIcon, PencilSimpleIcon, ProhibitIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "~/components/crm/CompleteTaskDialog";
+import ConfirmDialog, { type ConfirmRequest } from "~/components/crm/ConfirmDialog";
+import TaskDialog, { type TaskDialogState } from "~/components/crm/TaskDialog";
 import TierBadge from "~/components/crm/TierBadge";
 import { taskEmailLink, useCrmTasks, useDeleteTask, useUpdateTask } from "~/queries/crm";
 import type { CrmTask } from "~/types";
@@ -26,25 +28,34 @@ export default function CrmTasks() {
 	const toast = useKumoToastManager();
 	const [status, setStatus] = useState("open");
 	const [completing, setCompleting] = useState<CrmTask | null>(null);
+	const [editing, setEditing] = useState<TaskDialogState>(null);
 	const updateTask = useUpdateTask();
 	const deleteTask = useDeleteTask();
 	const params = useMemo(() => ({ status, limit: "200" }), [status]);
 	const { data, isLoading } = useCrmTasks(params);
 	const tasks = data?.tasks ?? [];
 
-	const reopen = async (task: CrmTask) => {
-		await updateTask.mutateAsync({ id: task.id, status: "open" });
-		toast.add({ title: "Task reopened" });
-	};
-	const cancel = async (task: CrmTask) => {
-		await updateTask.mutateAsync({ id: task.id, status: "cancelled" });
-		toast.add({ title: "Task cancelled" });
-	};
-	const remove = async (task: CrmTask) => {
-		if (!window.confirm(`Delete task "${task.title}"?`)) return;
-		await deleteTask.mutateAsync(task.id);
-		toast.add({ title: "Task deleted" });
-	};
+	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+
+	const reopen = (task: CrmTask) => setConfirm({
+		title: "Reopen task?",
+		description: <>“{task.title}” goes back to <strong>Open</strong>; its resolution note is cleared.</>,
+		confirmLabel: "Reopen",
+		onConfirm: async () => { await updateTask.mutateAsync({ id: task.id, status: "open" }); toast.add({ title: "Task reopened" }); },
+	});
+	const cancel = (task: CrmTask) => setConfirm({
+		title: "Cancel task?",
+		description: <>“{task.title}” is marked <strong>Cancelled</strong>. It stays in the Cancelled list and can be reopened later.</>,
+		confirmLabel: "Cancel task",
+		onConfirm: async () => { await updateTask.mutateAsync({ id: task.id, status: "cancelled" }); toast.add({ title: "Task cancelled" }); },
+	});
+	const remove = (task: CrmTask) => setConfirm({
+		title: "Delete task permanently?",
+		description: <>“{task.title}” will be removed. This cannot be undone.</>,
+		confirmLabel: "Delete",
+		danger: true,
+		onConfirm: async () => { await deleteTask.mutateAsync(task.id); toast.add({ title: "Task deleted" }); },
+	});
 
 	return (
 		<div className="space-y-4">
@@ -80,7 +91,7 @@ export default function CrmTasks() {
 							<div key={task.id} className="flex items-start gap-3 px-4 py-3 hover:bg-kumo-tint/40">
 								<div className="flex-1 min-w-0">
 									<div className="flex items-center gap-2 flex-wrap">
-										<span className={`text-sm font-medium ${task.status === "open" ? "text-kumo-default" : "text-kumo-subtle line-through"}`}>{task.title}</span>
+										<button type="button" onClick={() => setEditing({ mode: "edit", task })} className={`text-sm font-medium text-left hover:underline ${task.status === "open" ? "text-kumo-default" : "text-kumo-subtle line-through"}`} title="Edit task">{task.title}</button>
 										{task.priority === "high" && <span className="text-[10px] uppercase font-semibold text-kumo-danger">High</span>}
 										<TierBadge tier={task.contact_tier} />
 									</div>
@@ -101,6 +112,9 @@ export default function CrmTasks() {
 									{task.description && <p className="mt-1 text-xs text-kumo-strong whitespace-pre-wrap">{task.description}</p>}
 								</div>
 								<div className="flex items-center gap-1 shrink-0">
+									<Tooltip content="Edit task" side="bottom" asChild>
+										<Button type="button" size="xs" variant="ghost" shape="square" icon={<PencilSimpleIcon size={14} />} onClick={() => setEditing({ mode: "edit", task })} aria-label="Edit task" />
+									</Tooltip>
 									{link && (
 										<Tooltip content="Open email" side="bottom" asChild>
 											<RouterLink to={link} className="inline-flex items-center justify-center h-7 w-7 rounded-md text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default" aria-label="Open email">
@@ -112,7 +126,7 @@ export default function CrmTasks() {
 										<>
 											<Button type="button" size="xs" variant="primary" icon={<CheckIcon size={13} />} onClick={() => setCompleting(task)}>Done</Button>
 											<Tooltip content="Cancel task" side="bottom" asChild>
-												<Button type="button" size="xs" variant="ghost" shape="square" icon={<TrashIcon size={14} />} onClick={() => cancel(task)} aria-label="Cancel task" />
+												<Button type="button" size="xs" variant="ghost" shape="square" icon={<ProhibitIcon size={14} />} onClick={() => cancel(task)} aria-label="Cancel task" />
 											</Tooltip>
 										</>
 									) : (
@@ -133,6 +147,8 @@ export default function CrmTasks() {
 			)}
 
 			<CompleteTaskDialog task={completing} onClose={() => setCompleting(null)} />
+			<TaskDialog state={editing} onClose={() => setEditing(null)} />
+			<ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 		</div>
 	);
 }

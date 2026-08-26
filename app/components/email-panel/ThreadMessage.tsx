@@ -127,9 +127,9 @@ export default function ThreadMessage({
 										email={email.sender}
 										tier={email.contact_tier}
 										contactId={email.contact_id}
-										hasOpenTask={email.has_open_task}
 										mailboxId={mailboxId}
 										emailId={email.id}
+										subject={email.subject}
 									/>
 								)}
 							</div>
