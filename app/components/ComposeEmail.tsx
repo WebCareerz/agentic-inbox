@@ -8,6 +8,7 @@ import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
 import ImportEmailJson from "./ImportEmailJson";
+import ComposeAttachments from "./ComposeAttachments";
 import { useUIStore } from "~/hooks/useUIStore";
 
 export default function ComposeEmail() {
@@ -32,12 +33,16 @@ export default function ComposeEmail() {
 		body,
 		setBody,
 		error,
+		setError,
 		isSavingDraft,
 		isSending,
 		formTitle,
 		handleSaveDraft,
 		handleSend,
 		importFromJson,
+		attachments,
+		addAttachments,
+		removeAttachment,
 	} = useComposeForm(mailboxId, folder);
 
 	return (
@@ -109,6 +114,13 @@ export default function ComposeEmail() {
 						</Text>
 						<RichTextEditor value={body} onChange={setBody} />
 					</div>
+					<ComposeAttachments
+						attachments={attachments}
+						onAdd={addAttachments}
+						onRemove={removeAttachment}
+						onError={setError}
+						disabled={isSending}
+					/>
 					<div className="flex justify-between items-center pt-2">
 						<Button
 							type="button"

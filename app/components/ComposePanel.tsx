@@ -8,6 +8,7 @@ import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import RichTextEditor from "./RichTextEditor";
 import ImportEmailJson from "./ImportEmailJson";
+import ComposeAttachments from "./ComposeAttachments";
 
 export default function ComposePanel() {
 	const { mailboxId, folder } = useParams<{
@@ -29,12 +30,16 @@ export default function ComposePanel() {
 		body,
 		setBody,
 		error,
+		setError,
 		isSavingDraft,
 		isSending,
 		formTitle,
 		handleSaveDraft,
 		handleSend,
 		importFromJson,
+		attachments,
+		addAttachments,
+		removeAttachment,
 		closeCompose,
 		closePanel,
 	} = useComposeForm(mailboxId, folder);
@@ -150,6 +155,14 @@ export default function ComposePanel() {
 							onChange={setBody}
 						/>
 					</div>
+
+					<ComposeAttachments
+						attachments={attachments}
+						onAdd={addAttachments}
+						onRemove={removeAttachment}
+						onError={setError}
+						disabled={isSending}
+					/>
 				</div>
 
 				{/* Footer actions */}

@@ -18,6 +18,8 @@ import { useDeleteEmail, useForwardEmail, useReplyToEmail, useSaveDraft, useSend
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
 import { parseImportedEmail } from "~/lib/import-email";
+import { MAX_ATTACHMENTS_BYTES } from "~/components/ComposeAttachments";
+import { formatBytes } from "~/lib/utils";
 
 function appendUniqueAddress(
 	addresses: string[],
@@ -163,6 +165,18 @@ function buildInitialComposeFields(
 	};
 }
 
+function fileToBase64(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => {
+			const result = reader.result as string;
+			resolve(result.slice(result.indexOf(",") + 1)); // strip data:*;base64, prefix
+		};
+		reader.onerror = () => reject(reader.error);
+		reader.readAsDataURL(file);
+	});
+}
+
 export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const toastManager = useKumoToastManager();
 	const { composeOptions, closePanel, closeCompose } = useUIStore();
@@ -179,6 +193,7 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const [showCcBcc, setShowCcBcc] = useState(false);
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
+	const [attachments, setAttachments] = useState<File[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [isSending, setIsSending] = useState(false);
@@ -208,7 +223,20 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setShowCcBcc(initialFields.showCcBcc);
 		setSubject(initialFields.subject);
 		setBody(initialFields.body);
+		setAttachments([]);
 	}, [composeOptions, currentMailbox?.email, sigBlock]);
+
+	/** Add files, enforcing the total-size cap. Returns an error message or null. */
+	const addAttachments = (files: File[]): string | null => {
+		const current = attachments.reduce((sum, f) => sum + f.size, 0);
+		const incoming = files.reduce((sum, f) => sum + f.size, 0);
+		if (current + incoming > MAX_ATTACHMENTS_BYTES) {
+			return `Attachments too large: ${formatBytes(current + incoming)} exceeds the ${formatBytes(MAX_ATTACHMENTS_BYTES)} limit.`;
+		}
+		setAttachments((prev) => [...prev, ...files]);
+		return null;
+	};
+	const removeAttachment = (index: number) => setAttachments((prev) => prev.filter((_, i) => i !== index));
 
 	const handleSaveDraft = async () => {
 		if (!mailboxId || isSending) return; setIsSavingDraft(true); setError(null);
@@ -241,6 +269,17 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
 		const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
 		const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
+		let encodedAttachments: { content: string; filename: string; type: string; disposition: "attachment" }[] | undefined;
+		if (attachments.length > 0) {
+			try {
+				encodedAttachments = await Promise.all(attachments.map(async (file) => ({
+					content: await fileToBase64(file),
+					filename: file.name,
+					type: file.type || "application/octet-stream",
+					disposition: "attachment" as const,
+				})));
+			} catch { setError("Failed to read attachment."); return; }
+		}
 		const emailData = {
 			to: toEmailListValue(toRecipients),
 			cc: toEmailListValue(ccRecipients),
@@ -249,6 +288,7 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			subject,
 			html: body,
 			text: htmlToPlainText(body),
+			...(encodedAttachments ? { attachments: encodedAttachments } : {}),
 		};
 		const draftId = composeOptions.draftEmail?.id; const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
 		setIsSending(true); toastManager.add({ title: "Sending email..." });
@@ -281,5 +321,5 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		}
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, importFromJson, closeCompose, closePanel };
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, importFromJson, attachments, addAttachments, removeAttachment, closeCompose, closePanel };
 }
