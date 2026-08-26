@@ -7,9 +7,10 @@ import { CrownSimpleIcon, DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon, Upl
 import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
+import AddContactDialog from "~/components/crm/AddContactDialog";
 import ImportContactsDialog from "~/components/crm/ImportContactsDialog";
 import TierBadge from "~/components/crm/TierBadge";
-import { useBulkUpsertContacts, useCrmContacts, useImportFromMailboxes, useUpsertContact } from "~/queries/crm";
+import { useBulkUpsertContacts, useCrmContacts, useImportFromMailboxes } from "~/queries/crm";
 
 const TIER_FILTERS = [
 	{ value: "", label: "All classified" },
@@ -21,13 +22,12 @@ const TIER_FILTERS = [
 export default function CrmContacts() {
 	const [tier, setTier] = useState("");
 	const [q, setQ] = useState("");
-	const [newEmail, setNewEmail] = useState("");
+	const [addOpen, setAddOpen] = useState(false);
 	const [bulkOpen, setBulkOpen] = useState(false);
 	const [includeCorporate, setIncludeCorporate] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const bulk = useBulkUpsertContacts();
-	const upsert = useUpsertContact();
 	const importMailboxes = useImportFromMailboxes();
 	const toast = useKumoToastManager();
 
@@ -69,14 +69,6 @@ export default function CrmContacts() {
 		}
 	};
 
-	const addContact = async (e: React.FormEvent) => {
-		e.preventDefault();
-		const email = newEmail.trim();
-		if (!email) return;
-		await upsert.mutateAsync({ email, tier: "free" });
-		setNewEmail("");
-	};
-
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center gap-2 flex-wrap">
@@ -102,15 +94,10 @@ export default function CrmContacts() {
 					<Button type="button" size="sm" variant="secondary" icon={<UploadSimpleIcon size={14} />} onClick={() => setBulkOpen(true)}>
 						Bulk add
 					</Button>
-				</div>
-				<form onSubmit={addContact} className="flex items-center gap-1">
-					<div className="w-56">
-						<Input size="sm" type="email" placeholder="Add contact by email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
-					</div>
-					<Button type="submit" size="sm" variant="secondary" icon={<PlusIcon size={14} />} loading={upsert.isPending} disabled={!newEmail.trim()}>
-						Add
+					<Button type="button" size="sm" variant="primary" icon={<PlusIcon size={14} />} onClick={() => setAddOpen(true)}>
+						Add contact
 					</Button>
-				</form>
+				</div>
 			</div>
 
 			{selected.size > 0 && (
@@ -172,6 +159,7 @@ export default function CrmContacts() {
 				</div>
 			)}
 
+			<AddContactDialog open={addOpen} onClose={() => setAddOpen(false)} />
 			<ImportContactsDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />
 
 			<Dialog.Root open={confirmOpen} onOpenChange={(o) => !o && setConfirmOpen(false)}>
