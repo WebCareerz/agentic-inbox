@@ -3,13 +3,13 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Badge, Button, Dialog, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
-import { DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon, UploadSimpleIcon } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { CrownSimpleIcon, DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon, UploadSimpleIcon, UserIcon, XIcon } from "@phosphor-icons/react";
+import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
 import ImportContactsDialog from "~/components/crm/ImportContactsDialog";
 import TierBadge from "~/components/crm/TierBadge";
-import { useCrmContacts, useImportFromMailboxes, useUpsertContact } from "~/queries/crm";
+import { useBulkUpsertContacts, useCrmContacts, useImportFromMailboxes, useUpsertContact } from "~/queries/crm";
 
 const TIER_FILTERS = [
 	{ value: "", label: "All classified" },
@@ -25,6 +25,8 @@ export default function CrmContacts() {
 	const [bulkOpen, setBulkOpen] = useState(false);
 	const [includeCorporate, setIncludeCorporate] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const bulk = useBulkUpsertContacts();
 	const upsert = useUpsertContact();
 	const importMailboxes = useImportFromMailboxes();
 	const toast = useKumoToastManager();
@@ -47,6 +49,25 @@ export default function CrmContacts() {
 	const params = useMemo(() => ({ ...(tier ? { tier } : {}), ...(q ? { q } : {}), limit: "200" }), [tier, q]);
 	const { data, isLoading } = useCrmContacts(params);
 	const contacts = useMemo(() => (data?.contacts ?? []).filter((c) => tier || c.tier !== "unknown"), [data, tier]);
+
+	// Clear selection when the filter changes so a stale selection can't be applied blindly.
+	useEffect(() => { setSelected(new Set()); }, [tier, q]);
+
+	const allSelected = contacts.length > 0 && contacts.every((c) => selected.has(c.email));
+	const toggleAll = () => setSelected(allSelected ? new Set() : new Set(contacts.map((c) => c.email)));
+	const toggleOne = (email: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(email)) next.delete(email); else next.add(email); return next; });
+
+	const applyTier = async (next: "free" | "paid") => {
+		const emails = [...selected];
+		if (emails.length === 0) return;
+		try {
+			const r = await bulk.mutateAsync(emails.map((email) => ({ email, tier: next })));
+			toast.add({ title: `${r.created + r.updated} contact${r.created + r.updated === 1 ? "" : "s"} marked as ${next}` });
+			setSelected(new Set());
+		} catch (e) {
+			toast.add({ title: (e as Error).message || "Update failed", variant: "error" });
+		}
+	};
 
 	const addContact = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -92,6 +113,15 @@ export default function CrmContacts() {
 				</form>
 			</div>
 
+			{selected.size > 0 && (
+				<div className="flex items-center gap-2 rounded-lg border border-kumo-brand/30 bg-kumo-brand/5 px-3 py-2">
+					<span className="text-sm text-kumo-default font-medium">{selected.size} selected</span>
+					<Button type="button" size="sm" variant="primary" icon={<UserIcon size={14} />} onClick={() => applyTier("free")} loading={bulk.isPending}>Mark as Free</Button>
+					<Button type="button" size="sm" variant="secondary" icon={<CrownSimpleIcon size={14} />} onClick={() => applyTier("paid")} disabled={bulk.isPending}>Mark as Paid</Button>
+					<Button type="button" size="sm" variant="ghost" icon={<XIcon size={14} />} onClick={() => setSelected(new Set())} disabled={bulk.isPending}>Clear</Button>
+				</div>
+			)}
+
 			{isLoading ? (
 				<div className="flex justify-center py-20"><Loader size="lg" /></div>
 			) : contacts.length === 0 ? (
@@ -107,7 +137,10 @@ export default function CrmContacts() {
 					<table className="w-full text-sm">
 						<thead className="bg-kumo-tint/50 text-xs uppercase tracking-wide text-kumo-subtle">
 							<tr>
-								<th className="px-4 py-2 text-left font-medium">Contact</th>
+								<th className="pl-4 pr-1 py-2 w-8">
+									<input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" className="cursor-pointer" />
+								</th>
+								<th className="px-3 py-2 text-left font-medium">Contact</th>
 								<th className="px-4 py-2 text-left font-medium">Tier</th>
 								<th className="px-4 py-2 text-left font-medium hidden md:table-cell">Kind</th>
 								<th className="px-4 py-2 text-left font-medium">Open tasks</th>
@@ -116,8 +149,11 @@ export default function CrmContacts() {
 						</thead>
 						<tbody>
 							{contacts.map((c) => (
-								<tr key={c.id} className="border-t border-kumo-line hover:bg-kumo-tint/40">
-									<td className="px-4 py-2.5">
+								<tr key={c.id} className={`border-t border-kumo-line hover:bg-kumo-tint/40 ${selected.has(c.email) ? "bg-kumo-brand/5" : ""}`}>
+									<td className="pl-4 pr-1 py-2.5">
+										<input type="checkbox" checked={selected.has(c.email)} onChange={() => toggleOne(c.email)} aria-label={`Select ${c.email}`} className="cursor-pointer" />
+									</td>
+									<td className="px-3 py-2.5">
 										<RouterLink to={`/crm/contacts/${c.id}`} className="no-underline">
 											<div className="font-medium text-kumo-default">{c.name || c.email}</div>
 											{c.name && <div className="text-xs text-kumo-subtle">{c.email}</div>}

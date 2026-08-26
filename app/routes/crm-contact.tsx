@@ -3,14 +3,57 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon, CheckIcon, CrownSimpleIcon, UserIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, ArrowDownLeftIcon, ArrowUpRightIcon, CheckIcon, ChatsCircleIcon, CrownSimpleIcon, UserIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, useParams } from "react-router";
 import { formatListDate } from "shared/dates";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "~/components/crm/CompleteTaskDialog";
 import TierBadge from "~/components/crm/TierBadge";
 import { taskEmailLink, useCrmContact, useUpdateContact } from "~/queries/crm";
-import type { CrmTask } from "~/types";
+import type { CrmActivity, CrmTask } from "~/types";
+
+interface ActivityRef { mailboxId?: string | null; emailId?: string | null; threadId?: string | null }
+
+function parseRef(ref: string): ActivityRef {
+	try { return JSON.parse(ref) as ActivityRef; } catch { return {}; }
+}
+
+function emailLink(ref: ActivityRef): string | null {
+	if (!ref.mailboxId || !ref.emailId) return null;
+	return `/mailbox/${encodeURIComponent(ref.mailboxId)}/emails/inbox?email=${encodeURIComponent(ref.emailId)}`;
+}
+
+type TimelineItem =
+	| { kind: "thread"; key: string; at: string; subject: string; messages: (CrmActivity & { parsed: ActivityRef })[] }
+	| { kind: "single"; key: string; at: string; activity: CrmActivity; parsed: ActivityRef };
+
+/** Merge email_in / email_out activities that belong to the same thread into one conversation card. */
+function buildTimeline(activities: CrmActivity[]): TimelineItem[] {
+	const threads = new Map<string, TimelineItem & { kind: "thread" }>();
+	const items: TimelineItem[] = [];
+	for (const a of activities) {
+		const parsed = parseRef(a.ref);
+		if ((a.type === "email_in" || a.type === "email_out") && (parsed.threadId || parsed.emailId)) {
+			const key = `thread:${parsed.threadId || parsed.emailId}`;
+			let t = threads.get(key);
+			if (!t) {
+				t = { kind: "thread", key, at: a.created_at, subject: "", messages: [] };
+				threads.set(key, t);
+				items.push(t);
+			}
+			t.messages.push({ ...a, parsed });
+			if (a.created_at > t.at) t.at = a.created_at;
+		} else {
+			items.push({ kind: "single", key: a.id, at: a.created_at, activity: a, parsed });
+		}
+	}
+	for (const t of threads.values()) {
+		t.messages.sort((x, y) => (x.created_at < y.created_at ? -1 : 1));
+		const first = t.messages.find((m) => m.type === "email_in") ?? t.messages[0];
+		t.subject = first.summary.replace(/^(Received|Sent):\s*/, "").replace(/^(re|fwd?):\s*/i, "").trim() || "(no subject)";
+	}
+	return items.sort((x, y) => (x.at > y.at ? -1 : 1));
+}
 
 export default function CrmContactDetail() {
 	const { contactId } = useParams<{ contactId: string }>();
@@ -31,6 +74,7 @@ export default function CrmContactDetail() {
 	if (isLoading) return <div className="flex justify-center py-20"><Loader size="lg" /></div>;
 	if (!data) return <div className="text-sm text-kumo-subtle">Contact not found.</div>;
 	const { contact, tasks, activities } = data;
+	const timeline = buildTimeline(activities);
 
 	const setTier = async (tier: "paid" | "free" | "unknown") => {
 		await update.mutateAsync({ id: contact.id, tier });
@@ -110,16 +154,57 @@ export default function CrmContactDetail() {
 				)}
 				<section className="rounded-xl border border-kumo-line bg-kumo-base">
 					<h3 className="px-5 py-3 text-sm font-semibold text-kumo-default border-b border-kumo-line">Timeline</h3>
-					{activities.length === 0 ? (
+					{timeline.length === 0 ? (
 						<p className="px-5 py-4 text-sm text-kumo-subtle">No activity yet.</p>
 					) : (
 						<ul className="divide-y divide-kumo-line">
-							{activities.map((a) => (
-								<li key={a.id} className="px-5 py-2.5 text-sm">
-									<div className="text-kumo-default">{a.summary}</div>
-									<div className="text-xs text-kumo-subtle">{a.type.replace(/_/g, " ")} · {formatListDate(a.created_at)}</div>
-								</li>
-							))}
+							{timeline.map((item) =>
+								item.kind === "thread" ? (
+									<li key={item.key} className="px-5 py-3 text-sm">
+										<div className="flex items-center gap-2 min-w-0">
+											<ChatsCircleIcon size={16} className="text-kumo-subtle shrink-0" />
+											<span className="font-medium text-kumo-default truncate">{item.subject}</span>
+											<span className="text-xs text-kumo-subtle shrink-0">{item.messages.length} message{item.messages.length === 1 ? "" : "s"} · {formatListDate(item.at)}</span>
+										</div>
+										<ul className="mt-1.5 ml-6 space-y-1">
+											{item.messages.map((m) => {
+												const link = emailLink(m.parsed);
+												const label = m.type === "email_in" ? "Received" : "Sent";
+												const Icon = m.type === "email_in" ? ArrowDownLeftIcon : ArrowUpRightIcon;
+												const inner = (
+													<span className="inline-flex items-center gap-1.5 text-xs">
+														<Icon size={12} className={m.type === "email_in" ? "text-kumo-brand" : "text-kumo-subtle"} />
+														<span className="text-kumo-default">{label}</span>
+														<span className="text-kumo-subtle">· {formatListDate(m.created_at)}</span>
+													</span>
+												);
+												return (
+													<li key={m.id}>
+														{link ? (
+															<RouterLink to={link} className="no-underline hover:underline inline-flex items-center gap-1">
+																{inner}<ArrowSquareOutIcon size={11} className="text-kumo-subtle" />
+															</RouterLink>
+														) : inner}
+													</li>
+												);
+											})}
+										</ul>
+									</li>
+								) : (
+									<li key={item.key} className="px-5 py-2.5 text-sm">
+										{(() => {
+											const link = emailLink(item.parsed);
+											const body = (
+												<>
+													<div className="text-kumo-default">{item.activity.summary}</div>
+													<div className="text-xs text-kumo-subtle">{item.activity.type.replace(/_/g, " ")} · {formatListDate(item.activity.created_at)}</div>
+												</>
+											);
+											return link ? <RouterLink to={link} className="block no-underline hover:underline">{body}</RouterLink> : body;
+										})()}
+									</li>
+								),
+							)}
 						</ul>
 					)}
 				</section>
