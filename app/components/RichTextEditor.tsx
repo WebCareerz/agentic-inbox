@@ -26,6 +26,21 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Blockquote from "@tiptap/extension-blockquote";
+
+/**
+ * Blockquote that keeps `class` / `style` so quoted-reply markup
+ * (gmail_quote + left border) survives editing and reaches the outgoing email.
+ */
+const QuoteBlockquote = Blockquote.extend({
+	addAttributes() {
+		return {
+			...this.parent?.(),
+			class: { default: null },
+			style: { default: null },
+		};
+	},
+});
 import { useCallback, useEffect } from "react";
 
 interface RichTextEditorProps {
@@ -39,7 +54,8 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
 	const editor = useEditor({
 		extensions: [
-			StarterKit,
+			StarterKit.configure({ blockquote: false }),
+			QuoteBlockquote,
 			Underline,
 			TextAlign.configure({ types: ["heading", "paragraph"] }),
 			LinkExtension.configure({ openOnClick: false }),

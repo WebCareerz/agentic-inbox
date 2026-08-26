@@ -151,6 +151,22 @@ export function getSignatureBlock(settings?: {
 /**
  * Build a quoted reply block HTML string from original email data.
  */
+/**
+ * Sanitize an email body for embedding inside a quoted reply / forward block.
+ * Keeps structure (paragraphs, line breaks, nested blockquotes, links) so
+ * multi-round threads stay readable, while DOMPurify strips scripts, event
+ * handlers and other active content before it reaches the compose editor.
+ */
+export function sanitizeHtmlForQuote(html: string): string {
+	if (!html) return "";
+	return DOMPurify.sanitize(html, {
+		FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input", "button", "meta", "link", "title", "head"],
+		FORBID_ATTR: ["id", "style"],
+	}).trim();
+}
+
+const QUOTE_BLOCKQUOTE_STYLE = "margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex;color:#666";
+
 export function buildQuotedReplyBlock(
 	dateStr: string | undefined,
 	sender: string,
@@ -158,17 +174,15 @@ export function buildQuotedReplyBlock(
 ): string {
 	if (!body) return "";
 	const formattedDate = formatComposeDate(dateStr);
-	
+
 	// HTML-escape sender to prevent <john@example.com> from disappearing as a tag
 	const escapedSender = escapeHtml(sender);
+	const bodyToQuote = sanitizeHtmlForQuote(body);
+	if (!bodyToQuote) return "";
 
-	// Sanitize the body to plain text to prevent stored XSS.
-	// The original HTML renders safely in the sandboxed iframe, but quoted
-	// reply blocks are injected into the compose editor where raw HTML would
-	// execute. Convert to escaped plain text instead.
-	const bodyToQuote = escapeHtml(stripHtml(body)).replace(/\n/g, "<br>");
-
-	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${formattedDate}, ${escapedSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
+	// Mirrors Gmail's own quote markup so Gmail renders it with its native
+	// quote styling and can collapse it.
+	return `<br><div class="gmail_quote"><div class="gmail_attr">On ${formattedDate}, ${escapedSender} wrote:</div><blockquote class="gmail_quote" style="${QUOTE_BLOCKQUOTE_STYLE}">${bodyToQuote}</blockquote></div>`;
 }
 
 /**

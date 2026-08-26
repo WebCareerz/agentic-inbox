@@ -10,8 +10,8 @@ import {
 	formatComposeDate,
 	getSignatureBlock,
 	htmlToPlainText,
+	sanitizeHtmlForQuote,
 	splitEmailList,
-	stripHtml,
 	toEmailListValue,
 } from "~/lib/utils";
 import { useDeleteEmail, useForwardEmail, useReplyToEmail, useSaveDraft, useSendEmail } from "~/queries/emails";
@@ -70,7 +70,7 @@ function buildForwardBody(
 ) {
 	const safeSender = escapeHtml(original.sender);
 	const safeSubject = escapeHtml(original.subject);
-	const safeBody = escapeHtml(stripHtml(original.body || "")).replace(/\n/g, "<br>");
+	const safeBody = sanitizeHtmlForQuote(original.body || "");
 
 	return `<p><br></p>${sigBlock ? `${sigBlock}<br>` : ""}<div style="border: 1px solid #ddd; padding: 1em; background-color: #f9f9f9; margin: 1em 0;"><strong>Forwarded message:</strong><br><strong>From:</strong> ${safeSender}<br><strong>Date:</strong> ${formatComposeDate(original.date)}<br><strong>Subject:</strong> ${safeSubject}<br><br>${safeBody}</div>`;
 }

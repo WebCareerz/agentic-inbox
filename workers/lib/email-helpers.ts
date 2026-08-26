@@ -189,6 +189,44 @@ export function stripHtmlToText(html: string): string {
 		.trim();
 }
 
+function decodeBasicEntities(text: string): string {
+	return text
+		.replace(/&#(\d+);/g, (_m, code: string) => String.fromCodePoint(Number(code)))
+		.replace(/&#x([0-9a-f]+);/gi, (_m, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+		.replace(/&nbsp;/g, " ")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;|&apos;/g, "'")
+		.replace(/&amp;/g, "&");
+}
+
+/**
+ * Convert an HTML email body to plain text while preserving line structure
+ * (paragraphs, <br>, list items, nested blockquotes), and decode entities so
+ * the result can be safely re-escaped without double-encoding.
+ * Used for quoted replies generated server-side (no DOM / DOMPurify here).
+ */
+export function htmlToQuotedText(html: string): string {
+	if (!html) return "";
+	const text = html
+		.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+		.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+		.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
+		.replace(/<!--[\s\S]*?-->/g, "")
+		.replace(/<br\s*\/?>/gi, "\n")
+		.replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
+		.replace(/<(p|div|blockquote|ul|ol|table)[^>]*>/gi, "\n")
+		.replace(/<[^>]+>/g, "")
+		.replace(/[ \t]+/g, " ");
+	return decodeBasicEntities(text)
+		.split("\n")
+		.map((line) => line.trim())
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
 /**
  * Format a date string for use in quoted reply blocks.
  * @deprecated Use `formatQuotedDate` from `shared/dates` directly.
@@ -209,14 +247,12 @@ export function buildQuotedReplyBlock(original: {
 	const originalSender = escapeHtml(original.sender || "unknown");
 	const originalDate = escapeHtml(formatEmailDate(original.date || ""));
 
-	// Sanitize the body to plain text to prevent stored XSS.
-	// The original HTML renders safely in the sandboxed iframe, but quoted
-	// reply blocks are injected into the compose editor and outgoing emails
-	// where raw HTML would execute. Convert to escaped plain text instead.
-	const plainBody = stripHtmlToText(original.body);
-	const bodyToQuote = escapeHtml(plainBody).replace(/\n/g, "<br>");
+	// No DOM sanitizer on the server: quote as escaped plain text, but keep
+	// line structure so multi-round threads don't collapse into one line.
+	const bodyToQuote = escapeHtml(htmlToQuotedText(original.body)).replace(/\n/g, "<br>");
+	if (!bodyToQuote) return "";
 
-	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${originalDate}, ${originalSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
+	return `<br><div class="gmail_quote"><div class="gmail_attr">On ${originalDate}, ${originalSender} wrote:</div><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex;color:#666">${bodyToQuote}</blockquote></div>`;
 }
 
 // ── Tool Logic (getFullEmail / getFullThread) ──────────────────────
