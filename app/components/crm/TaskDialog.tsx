@@ -6,7 +6,7 @@ import { Banner, Button, Dialog, Input, useKumoToastManager } from "@cloudflare/
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
-import { taskEmailLink, useCreateTask, useUpdateTask } from "~/queries/crm";
+import { taskEmailLink, useCreateTask, useDeleteTask, useUpdateTask } from "~/queries/crm";
 import type { CrmTask } from "~/types";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "./CompleteTaskDialog";
 import ConfirmDialog, { type ConfirmRequest } from "./ConfirmDialog";
@@ -39,6 +39,7 @@ export default function TaskDialog({ state, onClose }: TaskDialogProps) {
 	const toast = useKumoToastManager();
 	const createTask = useCreateTask();
 	const updateTask = useUpdateTask();
+	const deleteTask = useDeleteTask();
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
 	const [priority, setPriority] = useState<"normal" | "high">("normal");
@@ -63,7 +64,7 @@ export default function TaskDialog({ state, onClose }: TaskDialogProps) {
 	if (!state) return null;
 	const isEdit = state.mode === "edit";
 	const task = isEdit ? state.task : null;
-	const busy = createTask.isPending || updateTask.isPending;
+	const busy = createTask.isPending || updateTask.isPending || deleteTask.isPending;
 	const titleValid = title.trim().length > 0;
 
 	const submit = async (e: React.FormEvent) => {
@@ -102,6 +103,21 @@ export default function TaskDialog({ state, onClose }: TaskDialogProps) {
 			onConfirm: async () => {
 				await updateTask.mutateAsync({ id: task.id, status });
 				toast.add({ title: status === "open" ? "Task reopened" : "Task cancelled" });
+				onClose();
+			},
+		});
+	};
+
+	const remove = () => {
+		if (!task) return;
+		setConfirm({
+			title: "Delete task permanently?",
+			description: <>“{task.title}” will be removed. This cannot be undone.</>,
+			confirmLabel: "Delete",
+			danger: true,
+			onConfirm: async () => {
+				await deleteTask.mutateAsync(task.id);
+				toast.add({ title: "Task deleted" });
 				onClose();
 			},
 		});
@@ -160,6 +176,9 @@ export default function TaskDialog({ state, onClose }: TaskDialogProps) {
 								)}
 								{task && task.status !== "open" && (
 									<Button type="button" variant="secondary" size="sm" onClick={() => setStatus("open")} disabled={busy}>Reopen</Button>
+								)}
+								{task && (
+									<Button type="button" variant="ghost" size="sm" onClick={remove} disabled={busy} className="text-kumo-danger">Delete</Button>
 								)}
 							</div>
 							<div className="flex items-center gap-2">

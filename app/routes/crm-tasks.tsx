@@ -128,6 +128,9 @@ export default function CrmTasks() {
 											<Tooltip content="Cancel task" side="bottom" asChild>
 												<Button type="button" size="xs" variant="ghost" shape="square" icon={<ProhibitIcon size={14} />} onClick={() => cancel(task)} aria-label="Cancel task" />
 											</Tooltip>
+											<Tooltip content="Delete" side="bottom" asChild>
+												<Button type="button" size="xs" variant="ghost" shape="square" icon={<TrashIcon size={14} />} onClick={() => remove(task)} aria-label="Delete task" />
+											</Tooltip>
 										</>
 									) : (
 										<>
