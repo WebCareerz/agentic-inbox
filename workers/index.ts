@@ -402,6 +402,11 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 	}, attachmentData);
 
+	if (String(env.AUTO_DRAFT ?? "").toLowerCase() !== "true") {
+		console.log(`Auto-draft disabled (AUTO_DRAFT != "true"); stored email ${messageId} without drafting a reply.`);
+		return;
+	}
+
 	const agentStub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(mailboxId));
 	ctx.waitUntil(agentStub.fetch(new Request("https://agents/onNewEmail", {
 		method: "POST", headers: { "Content-Type": "application/json" },

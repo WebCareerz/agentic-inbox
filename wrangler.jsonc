@@ -18,7 +18,9 @@
 			"support@timelinevisualizer.net",
 			"hi@elfnames.wiki",
 			"support@elfnames.wiki"
-		]
+		],
+		// Set to "true" to have the AI agent auto-draft a reply for every incoming email.
+		"AUTO_DRAFT": "false"
 	},
 	"send_email": [
 		{
