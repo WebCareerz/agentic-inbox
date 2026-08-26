@@ -20,6 +20,8 @@ import { useUIStore } from "~/hooks/useUIStore";
 import { parseImportedEmail } from "~/lib/import-email";
 import { MAX_ATTACHMENTS_BYTES } from "~/components/ComposeAttachments";
 import { formatBytes } from "~/lib/utils";
+import { encodeAttachments } from "~/lib/attachments";
+import api from "~/services/api";
 
 function appendUniqueAddress(
 	addresses: string[],
@@ -165,18 +167,6 @@ function buildInitialComposeFields(
 	};
 }
 
-function fileToBase64(file: File): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onload = () => {
-			const result = reader.result as string;
-			resolve(result.slice(result.indexOf(",") + 1)); // strip data:*;base64, prefix
-		};
-		reader.onerror = () => reject(reader.error);
-		reader.readAsDataURL(file);
-	});
-}
-
 export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const toastManager = useKumoToastManager();
 	const { composeOptions, closePanel, closeCompose } = useUIStore();
@@ -194,6 +184,7 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
 	const [attachments, setAttachments] = useState<File[]>([]);
+	const [isLoadingAttachments, setIsLoadingAttachments] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [isSending, setIsSending] = useState(false);
@@ -224,7 +215,25 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setSubject(initialFields.subject);
 		setBody(initialFields.body);
 		setAttachments([]);
-	}, [composeOptions, currentMailbox?.email, sigBlock]);
+
+		// Editing a draft: pull its stored attachments back into the form as Files
+		const draft = composeOptions.draftEmail;
+		if (draft?.attachments?.length && mailboxId) {
+			const draftId = draft.id;
+			const files = draft.attachments;
+			setIsLoadingAttachments(true);
+			Promise.all(files.map(async (att) => {
+				const blob = await api.getAttachment(mailboxId, draftId, att.id);
+				return new File([blob], att.filename, { type: att.mimetype || blob.type });
+			}))
+				.then((loaded) => {
+					// Only apply if the user is still editing the same draft
+					if (lastInitializedOptionsRef.current === composeOptions) setAttachments(loaded);
+				})
+				.catch(() => setError("Failed to load draft attachments."))
+				.finally(() => setIsLoadingAttachments(false));
+		}
+	}, [composeOptions, currentMailbox?.email, sigBlock, mailboxId]);
 
 	/** Add files, enforcing the total-size cap. Returns an error message or null. */
 	const addAttachments = (files: File[]): string | null => {
@@ -239,9 +248,11 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const removeAttachment = (index: number) => setAttachments((prev) => prev.filter((_, i) => i !== index));
 
 	const handleSaveDraft = async () => {
-		if (!mailboxId || isSending) return; setIsSavingDraft(true); setError(null);
+		if (!mailboxId || isSending || isLoadingAttachments) return; setIsSavingDraft(true); setError(null);
 		try {
+			const encoded = attachments.length > 0 ? await encodeAttachments(attachments) : undefined;
 			await saveDraftMutation.mutateAsync({ mailboxId, draft: {
+				...(encoded ? { attachments: encoded } : {}),
 				to,
 				cc: cc || undefined,
 				bcc: bcc || undefined,
@@ -269,16 +280,11 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
 		const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
 		const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
-		let encodedAttachments: { content: string; filename: string; type: string; disposition: "attachment" }[] | undefined;
+		if (isLoadingAttachments) { setError("Attachments are still loading."); return; }
+		let encodedAttachments: Awaited<ReturnType<typeof encodeAttachments>> | undefined;
 		if (attachments.length > 0) {
-			try {
-				encodedAttachments = await Promise.all(attachments.map(async (file) => ({
-					content: await fileToBase64(file),
-					filename: file.name,
-					type: file.type || "application/octet-stream",
-					disposition: "attachment" as const,
-				})));
-			} catch { setError("Failed to read attachment."); return; }
+			try { encodedAttachments = await encodeAttachments(attachments); }
+			catch { setError("Failed to read attachment."); return; }
 		}
 		const emailData = {
 			to: toEmailListValue(toRecipients),
@@ -321,5 +327,5 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		}
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, importFromJson, attachments, addAttachments, removeAttachment, closeCompose, closePanel };
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, importFromJson, attachments, addAttachments, removeAttachment, isLoadingAttachments, closeCompose, closePanel };
 }

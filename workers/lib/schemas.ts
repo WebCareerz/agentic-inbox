@@ -58,6 +58,15 @@ export const ErrorResponseSchema = z.object({
 	error: z.string(),
 });
 
+/** Base64-encoded attachment as sent by the client (compose form, drafts, MCP). */
+export const AttachmentInputSchema = z.object({
+	content: z.string(), // base64 encoded
+	filename: z.string(),
+	type: z.string(),
+	disposition: z.enum(["attachment", "inline"]),
+	contentId: z.string().optional(),
+});
+
 export const SendEmailRequestSchema = z
 	.object({
 		to: RecipientFieldSchema,
@@ -70,17 +79,7 @@ export const SendEmailRequestSchema = z
 		subject: z.string(),
 		html: z.string().optional(),
 		text: z.string().optional(),
-		attachments: z
-			.array(
-				z.object({
-					content: z.string(), // base64 encoded
-					filename: z.string(),
-					type: z.string(),
-					disposition: z.enum(["attachment", "inline"]),
-					contentId: z.string().optional(),
-				}),
-			)
-			.optional(),
+		attachments: z.array(AttachmentInputSchema).optional(),
 		in_reply_to: z.string().optional(),
 		references: z.array(z.string()).optional(),
 		thread_id: z.string().optional(),

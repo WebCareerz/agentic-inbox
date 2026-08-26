@@ -40,6 +40,7 @@ export default function ComposePanel() {
 		attachments,
 		addAttachments,
 		removeAttachment,
+		isLoadingAttachments,
 		closeCompose,
 		closePanel,
 	} = useComposeForm(mailboxId, folder);
@@ -161,7 +162,7 @@ export default function ComposePanel() {
 						onAdd={addAttachments}
 						onRemove={removeAttachment}
 						onError={setError}
-						disabled={isSending}
+						disabled={isSending || isLoadingAttachments}
 					/>
 				</div>
 

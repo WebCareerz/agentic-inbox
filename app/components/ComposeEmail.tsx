@@ -43,6 +43,7 @@ export default function ComposeEmail() {
 		attachments,
 		addAttachments,
 		removeAttachment,
+		isLoadingAttachments,
 	} = useComposeForm(mailboxId, folder);
 
 	return (
@@ -119,7 +120,7 @@ export default function ComposeEmail() {
 						onAdd={addAttachments}
 						onRemove={removeAttachment}
 						onError={setError}
-						disabled={isSending}
+						disabled={isSending || isLoadingAttachments}
 					/>
 					<div className="flex justify-between items-center pt-2">
 						<Button
