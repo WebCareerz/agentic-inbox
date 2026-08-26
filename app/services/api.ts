@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type { Email, Folder, Mailbox, CrmActivity, CrmContact, CrmContactSummary, CrmTask } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -77,6 +77,13 @@ function post<T>(url: string, body?: unknown, opts?: { signal?: AbortSignal }) {
 function put<T>(url: string, body?: unknown) {
 	return request<T>(url, {
 		method: "PUT",
+		body: body != null ? JSON.stringify(body) : undefined,
+	});
+}
+
+function patch<T>(url: string, body?: unknown) {
+	return request<T>(url, {
+		method: "PATCH",
 		body: body != null ? JSON.stringify(body) : undefined,
 	});
 }
@@ -161,6 +168,25 @@ const api = {
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>
 		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/search`, { params }),
+
+	// ── CRM ────────────────────────────────────────────────────────
+	crmListContacts: (params: Record<string, string>) =>
+		get<{ contacts: CrmContactSummary[]; total: number }>("/api/v1/crm/contacts", { params }),
+	crmGetContact: (id: string) =>
+		get<{ contact: CrmContact; tasks: CrmTask[]; activities: CrmActivity[] }>(`/api/v1/crm/contacts/${id}`),
+	crmLookupContacts: (emails: string[]) =>
+		get<Record<string, { id: string; tier: string; email_kind: string; name: string | null }>>("/api/v1/crm/contacts/lookup", { params: { emails: emails.join(",") } }),
+	crmUpsertContact: (body: { email: string; tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) =>
+		post<CrmContact>("/api/v1/crm/contacts", body),
+	crmUpdateContact: (id: string, body: { tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) =>
+		patch<CrmContact>(`/api/v1/crm/contacts/${id}`, body),
+	crmListTasks: (params: Record<string, string>) =>
+		get<{ tasks: CrmTask[]; total: number }>("/api/v1/crm/tasks", { params }),
+	crmCreateTask: (body: { title?: string; description?: string | null; priority?: string; mailboxId?: string | null; emailId?: string | null; contact_email?: string | null }) =>
+		post<CrmTask>("/api/v1/crm/tasks", body),
+	crmUpdateTask: (id: string, body: Partial<Pick<CrmTask, "title" | "description" | "status" | "priority" | "due_at" | "resolution_type" | "resolution_note" | "resolution_ref">>) =>
+		patch<CrmTask>(`/api/v1/crm/tasks/${id}`, body),
+	crmDeleteTask: (id: string) => del<void>(`/api/v1/crm/tasks/${id}`),
 };
 
 export default api;

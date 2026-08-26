@@ -31,6 +31,16 @@ import {
 } from "../lib/tools";
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
 import type { Env } from "../types";
+import {
+	crmCompleteTask,
+	crmCreateTask,
+	crmGetContactByEmail,
+	crmListTasks,
+	crmUpsertContact,
+	RESOLUTION_VALUES,
+	STATUS_VALUES,
+	TIER_VALUES,
+} from "../lib/crm-tools";
 
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
@@ -264,6 +274,74 @@ function createEmailTools(env: Env, mailboxId: string) {
 			}),
 			execute: async ({ draftId }): Promise<unknown> => {
 				return toolDiscardDraft(env, mailboxId, draftId);
+			},
+		}),
+		crm_get_contact: defineTool({
+			description:
+				"Look up the CRM record for a customer email: tier (paid/free/unknown), notes, tags and open tasks. Use this to know whether a sender is a paying customer.",
+			parameters: z.object({ email: z.string().describe("Customer email address") }),
+			execute: async ({ email }): Promise<unknown> => {
+				return (await crmGetContactByEmail(env, email)) ?? { contact: null };
+			},
+		}),
+
+		crm_set_contact: defineTool({
+			description:
+				"Create or update a customer record: mark as paid/free, set name or notes. Only provided fields change.",
+			parameters: z.object({
+				email: z.string(),
+				tier: z.enum(TIER_VALUES).optional(),
+				name: z.string().optional(),
+				notes: z.string().optional(),
+			}),
+			execute: async ({ email, tier, name, notes }): Promise<unknown> => {
+				return crmUpsertContact(env, { email, tier, name, notes });
+			},
+		}),
+
+		crm_list_tasks: defineTool({
+			description: "List CRM tasks (to-dos). Defaults to open tasks. Each task carries the customer email/tier and the source email/thread IDs.",
+			parameters: z.object({
+				status: z.enum(STATUS_VALUES).default("open"),
+				contactEmail: z.string().optional(),
+				limit: z.number().default(50),
+			}),
+			execute: async ({ status, contactEmail, limit }): Promise<unknown> => {
+				let contact_id: string | undefined;
+				if (contactEmail) {
+					const contact = await crmGetContactByEmail(env, contactEmail);
+					if (!contact) return { tasks: [], total: 0 };
+					contact_id = contact.id;
+				}
+				return crmListTasks(env, { status, contact_id, limit });
+			},
+		}),
+
+		crm_create_task: defineTool({
+			description:
+				"Create a CRM task from an email in this mailbox (pass emailId; customer, thread and title are filled in automatically) or a standalone task (pass contactEmail + title).",
+			parameters: z.object({
+				emailId: z.string().optional().describe("Source email ID in this mailbox"),
+				title: z.string().optional(),
+				description: z.string().optional(),
+				priority: z.enum(["normal", "high"]).default("normal"),
+				contactEmail: z.string().optional(),
+			}),
+			execute: async ({ emailId, title, description, priority, contactEmail }): Promise<unknown> => {
+				return crmCreateTask(env, { mailboxId, emailId, title, description, priority, contact_email: contactEmail });
+			},
+		}),
+
+		crm_complete_task: defineTool({
+			description: "Mark a CRM task done with a resolution: replied, released, fixed or other, plus an optional note/reference.",
+			parameters: z.object({
+				taskId: z.string(),
+				resolutionType: z.enum(RESOLUTION_VALUES),
+				note: z.string().optional(),
+				ref: z.string().optional(),
+			}),
+			execute: async ({ taskId, resolutionType, note, ref }): Promise<unknown> => {
+				return (await crmCompleteTask(env, taskId, { type: resolutionType, note, ref })) ?? { error: "Task not found" };
 			},
 		}),
 	};

@@ -22,6 +22,17 @@ import {
 } from "../lib/tools";
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
 import type { Env } from "../types";
+import {
+	crmCompleteTask,
+	crmCreateTask,
+	crmGetContactByEmail,
+	crmListTasks,
+	crmLogActivity,
+	crmUpsertContact,
+	RESOLUTION_VALUES,
+	STATUS_VALUES,
+	TIER_VALUES,
+} from "../lib/crm-tools";
 
 /** Wrap a plain result object into MCP content format. */
 function mcpText(result: unknown) {
@@ -427,6 +438,115 @@ export class EmailMCP extends McpAgent<Env> {
 					};
 				}
 				return mcpText(result);
+			},
+		);
+		// ── CRM: crm_get_contact ───────────────────────────────────
+		this.server.tool(
+			"crm_get_contact",
+			"Look up a customer (CRM contact) by email address. Returns tier (unknown/free/paid), notes, tags, email_kind and open tasks. Returns null if no contact exists.",
+			{ email: z.string().describe("Customer email address") },
+			async ({ email }) => {
+				const contact = await crmGetContactByEmail(env, email);
+				return mcpText(contact ?? { contact: null, message: "No CRM contact for this email" });
+			},
+		);
+
+		// ── CRM: crm_upsert_contact ────────────────────────────────
+		this.server.tool(
+			"crm_upsert_contact",
+			"Create or update a customer record. Use to mark someone as a paid or free user, set their name, or add notes. Only provided fields are changed.",
+			{
+				email: z.string().describe("Customer email address"),
+				tier: z.enum(TIER_VALUES).optional().describe("Customer tier: paid, free, or unknown"),
+				name: z.string().optional().describe("Display name"),
+				notes: z.string().optional().describe("Free-form notes (replaces existing notes)"),
+				tags: z.array(z.string()).optional().describe("Tags (replaces existing tags)"),
+			},
+			async ({ email, tier, name, notes, tags }) => {
+				try {
+					return mcpText(await crmUpsertContact(env, { email, tier, name, notes, tags }));
+				} catch (e) {
+					return mcpError((e as Error).message);
+				}
+			},
+		);
+
+		// ── CRM: crm_list_tasks ────────────────────────────────────
+		this.server.tool(
+			"crm_list_tasks",
+			"List CRM tasks (to-dos created from customer emails). Each task includes the customer's email/tier and the source mailbox/email/thread IDs so you can read the original conversation with get_thread.",
+			{
+				status: z.enum(STATUS_VALUES).default("open").describe("Filter by status"),
+				contactEmail: z.string().optional().describe("Only tasks for this customer email"),
+				mailboxId: z.string().optional().describe("Only tasks created from this mailbox"),
+				limit: z.number().default(50),
+				page: z.number().default(1),
+			},
+			async ({ status, contactEmail, mailboxId, limit, page }) => {
+				let contact_id: string | undefined;
+				if (contactEmail) {
+					const contact = await crmGetContactByEmail(env, contactEmail);
+					if (!contact) return mcpText({ tasks: [], total: 0 });
+					contact_id = contact.id;
+				}
+				return mcpText(await crmListTasks(env, { status, contact_id, mailbox_id: mailboxId, limit, page }));
+			},
+		);
+
+		// ── CRM: crm_create_task ───────────────────────────────────
+		this.server.tool(
+			"crm_create_task",
+			"Create a CRM task. Pass mailboxId + emailId to create it from an email: the customer, thread and default title are filled in automatically. Or pass contactEmail + title for a standalone task.",
+			{
+				title: z.string().optional().describe("Task title (defaults to the email subject)"),
+				description: z.string().optional().describe("What needs to be done"),
+				priority: z.enum(["normal", "high"]).default("normal"),
+				mailboxId: z.string().optional().describe("Mailbox the source email belongs to"),
+				emailId: z.string().optional().describe("Source email ID"),
+				contactEmail: z.string().optional().describe("Customer email (when not derived from an email)"),
+			},
+			async ({ title, description, priority, mailboxId, emailId, contactEmail }) => {
+				if (mailboxId) {
+					const denied = await verifyMailbox(mailboxId);
+					if (denied) return denied;
+				}
+				try {
+					return mcpText(await crmCreateTask(env, { title, description, priority, mailboxId, emailId, contact_email: contactEmail }));
+				} catch (e) {
+					return mcpError((e as Error).message);
+				}
+			},
+		);
+
+		// ── CRM: crm_complete_task ─────────────────────────────────
+		this.server.tool(
+			"crm_complete_task",
+			"Mark a CRM task as done, recording how it was resolved: replied (answered the customer), released (shipped a version), fixed (code change), or other.",
+			{
+				taskId: z.string().describe("Task ID"),
+				resolutionType: z.enum(RESOLUTION_VALUES).describe("How the task was resolved"),
+				note: z.string().optional().describe("Short note, e.g. 'Fixed in v1.4.2'"),
+				ref: z.string().optional().describe("Reference: reply email ID, version, commit, URL"),
+			},
+			async ({ taskId, resolutionType, note, ref }) => {
+				const task = await crmCompleteTask(env, taskId, { type: resolutionType, note, ref });
+				if (!task) return mcpError(`Task "${taskId}" not found`);
+				return mcpText(task);
+			},
+		);
+
+		// ── CRM: crm_log_activity ──────────────────────────────────
+		this.server.tool(
+			"crm_log_activity",
+			"Append a note to a customer's activity timeline (e.g. what an automated process did). Creates the contact if needed.",
+			{
+				contactEmail: z.string().describe("Customer email address"),
+				summary: z.string().describe("One-line summary"),
+				type: z.string().default("note").describe("Activity type label, default 'note'"),
+				taskId: z.string().optional().describe("Related task ID"),
+			},
+			async ({ contactEmail, summary, type, taskId }) => {
+				return mcpText(await crmLogActivity(env, { contact_email: contactEmail, summary, type, task_id: taskId }));
 			},
 		);
 	}

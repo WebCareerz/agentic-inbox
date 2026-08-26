@@ -17,6 +17,8 @@ import {
 } from "./lib/email-helpers";
 import { AttachmentInputSchema, SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
+import { crmRoutes } from "./routes/crm";
+import { decorateWithCrm, getCrmStub } from "./lib/crm-tools";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
@@ -83,6 +85,7 @@ app.use("/api/*", cors({
 	},
 }));
 app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
+app.route("/api/v1/crm", crmRoutes);
 
 // -- Config ---------------------------------------------------------
 
@@ -153,12 +156,13 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const sortDirection = c.req.query("sortDirection") as "ASC" | "DESC" | undefined;
 	const stub = c.var.mailboxStub;
 
+	const mailboxId = c.req.param("mailboxId")!;
 	if (threaded && folder) {
 		const emails = await (stub as any).getThreadedEmails({ folder, page, limit });
 		const totalCount = await (stub as any).countThreadedEmails(folder);
-		return c.json({ emails, totalCount });
+		return c.json({ emails: await decorateWithCrm(c.env, mailboxId, emails), totalCount });
 	}
-	const emails = await stub.getEmails({ folder, thread_id, page, limit, sortColumn, sortDirection });
+	const emails = await decorateWithCrm(c.env, mailboxId, await stub.getEmails({ folder, thread_id, page, limit, sortColumn, sortDirection }));
 	if (folder) {
 		const totalCount = await stub.countEmails({ folder, thread_id });
 		return c.json({ emails, totalCount });
@@ -203,6 +207,10 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	}, attachmentData);
 
 	c.executionCtx.waitUntil(
+		getCrmStub(c.env).recordEmail({ direction: "out", email: (Array.isArray(to) ? to[0] : to) || "", mailboxId, emailId: messageId, threadId: thread_id || in_reply_to || messageId, subject })
+			.catch((e) => console.error("CRM record (send) failed:", (e as Error).message)),
+	);
+	c.executionCtx.waitUntil(
 		sendEmail(c.env.EMAIL, {
 			to, cc, bcc, from, subject, html, text,
 			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
@@ -238,8 +246,9 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 });
 
 app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
-	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
-	if (!email) return c.json({ error: "Email not found" }, 404);
+	const raw = await c.var.mailboxStub.getEmail(c.req.param("id")!);
+	if (!raw) return c.json({ error: "Email not found" }, 404);
+	const [email] = await decorateWithCrm(c.env, c.req.param("mailboxId")!, [raw as any]);
 	return new Response(JSON.stringify(email), {
 		headers: { "Content-Type": "application/json" },
 	});
@@ -268,7 +277,8 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/move", async (c: AppContext) =
 // -- Threads --------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/threads/:threadId", async (c: AppContext) => {
-	return c.json(await (c.var.mailboxStub as any).getThreadEmails(c.req.param("threadId")!));
+	const emails = await (c.var.mailboxStub as any).getThreadEmails(c.req.param("threadId")!);
+	return c.json(await decorateWithCrm(c.env, c.req.param("mailboxId")!, emails));
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppContext) => {
@@ -415,6 +425,15 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 		in_reply_to: inReplyTo, email_references: emailReferences.length > 0 ? JSON.stringify(emailReferences) : null,
 		thread_id: threadId, message_id: originalMessageId, raw_headers: JSON.stringify(parsedEmail.headers),
 	}, attachmentData);
+
+	ctx.waitUntil(
+		getCrmStub(env).recordEmail({
+			direction: "in",
+			email: (parsedEmail.from?.address || "").toLowerCase(),
+			name: parsedEmail.from?.name || null,
+			mailboxId, emailId: messageId, threadId, subject: parsedEmail.subject || "",
+		}).catch((e) => console.error("CRM record (inbound) failed:", (e as Error).message)),
+	);
 
 	if (String(env.AUTO_DRAFT ?? "").toLowerCase() !== "true") {
 		console.log(`Auto-draft disabled (AUTO_DRAFT != "true"); stored email ${messageId} without drafting a reply.`);

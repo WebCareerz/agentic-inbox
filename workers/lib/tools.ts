@@ -30,6 +30,7 @@ import { verifyDraft } from "./ai";
 import { sendEmail } from "../email-sender";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
+import { decorateWithCrm, getCrmStub } from "./crm-tools";
 
 // ── Type casts for DO methods not on the base stub type ────────────
 type MailboxSearchStub = {
@@ -76,7 +77,8 @@ export async function toolGetEmail(
 	const stub = getMailboxStub(env, mailboxId);
 	const email = await getFullEmail(stub, emailId);
 	if (!email) return { error: "Email not found" };
-	return email;
+	const [decorated] = await decorateWithCrm(env, mailboxId, [email as any]);
+	return decorated;
 }
 
 // ── get_thread ─────────────────────────────────────────────────────
@@ -87,7 +89,8 @@ export async function toolGetThread(
 	threadId: string,
 ) {
 	const stub = getMailboxStub(env, mailboxId);
-	return getFullThread(stub, threadId);
+	const thread = await getFullThread(stub, threadId);
+	return Array.isArray(thread) ? decorateWithCrm(env, mailboxId, thread as any[]) : thread;
 }
 
 // ── search_emails ──────────────────────────────────────────────────
@@ -466,6 +469,9 @@ export async function toolSendReply(
 		[],
 	);
 
+	await getCrmStub(env).recordEmail({ direction: "out", email: params.to, mailboxId, emailId: messageId, threadId, subject: params.subject })
+		.catch((e) => console.error("CRM record (agent reply) failed:", (e as Error).message));
+
 	return { status: "sent", messageId, message: `Reply sent to ${params.to}` };
 }
 
@@ -530,6 +536,9 @@ export async function toolSendEmail(
 		},
 		[],
 	);
+
+	await getCrmStub(env).recordEmail({ direction: "out", email: params.to, mailboxId, emailId: messageId, threadId: messageId, subject: params.subject })
+		.catch((e) => console.error("CRM record (agent send) failed:", (e as Error).message));
 
 	return { status: "sent", messageId, message: `Email sent to ${params.to}` };
 }

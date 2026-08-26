@@ -13,6 +13,8 @@ import {
 	PlusIcon,
 	TrashIcon,
 	TrayIcon,
+	UsersThreeIcon,
+	CheckSquareIcon,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
@@ -222,6 +224,18 @@ export default function Sidebar() {
 					</div>
 				)}
 			</nav>
+
+			{/* CRM shortcuts */}
+			<div className="px-2 py-2 border-t border-kumo-line space-y-0.5">
+				<NavLink to="/crm" end onClick={handleNavClick} className="flex items-center gap-3 py-2 px-3 rounded-md text-sm text-kumo-strong hover:bg-kumo-tint no-underline">
+					<UsersThreeIcon size={18} />
+					<span>Customers</span>
+				</NavLink>
+				<NavLink to="/crm/tasks" onClick={handleNavClick} className="flex items-center gap-3 py-2 px-3 rounded-md text-sm text-kumo-strong hover:bg-kumo-tint no-underline">
+					<CheckSquareIcon size={18} />
+					<span>Tasks</span>
+				</NavLink>
+			</div>
 
 			{/* Create folder dialog */}
 			<Dialog.Root

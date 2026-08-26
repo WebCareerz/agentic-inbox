@@ -5,6 +5,7 @@
 import type { Context } from "hono";
 import { sendEmail } from "../email-sender";
 import { storeAttachments } from "../lib/attachments";
+import { getCrmStub } from "../lib/crm-tools";
 import type { EmailFull } from "../lib/schemas";
 import {
 	validateSender,
@@ -87,6 +88,10 @@ export async function handleReplyEmail(c: AppContext) {
 
 	await stub.markThreadRead(thread_id);
 
+	c.executionCtx.waitUntil(
+		getCrmStub(c.env).recordEmail({ direction: "out", email: (Array.isArray(to) ? to[0] : to) || "", mailboxId, emailId: messageId, threadId: thread_id, subject })
+			.catch((e) => console.error("CRM record (reply) failed:", (e as Error).message)),
+	);
 	c.executionCtx.waitUntil(
 		sendEmail(c.env.EMAIL, {
 			to,

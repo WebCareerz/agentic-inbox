@@ -18,11 +18,12 @@ import {
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
 import ImportDraftsButton from "~/components/ImportDraftsButton";
 import MailboxSplitView from "~/components/MailboxSplitView";
+import TierBadge, { OpenTaskMarker } from "~/components/crm/TierBadge";
 import { getSnippetText } from "~/lib/utils";
 import {
 	useDeleteEmail,
@@ -200,6 +201,15 @@ export default function EmailListRoute() {
 		}
 	}, [mailboxId, folder, closePanel]);
 
+	// Deep link from CRM tasks: /mailbox/:id/emails/:folder?email=<id> opens that email.
+	const [searchParams, setSearchParams] = useSearchParams();
+	useEffect(() => {
+		const target = searchParams.get("email");
+		if (!target) return;
+		selectEmail(target);
+		setSearchParams((prev) => { prev.delete("email"); return prev; }, { replace: true });
+	}, [searchParams, setSearchParams, selectEmail]);
+
 	const toggleStar = (e: React.MouseEvent, email: Email) => {
 		e.preventDefault();
 		e.stopPropagation();
@@ -371,6 +381,8 @@ export default function EmailListRoute() {
 												>
 													{formatParticipants(email)}
 												</span>
+												<TierBadge tier={email.contact_tier} />
+												{email.has_open_task && <OpenTaskMarker />}
 												{(email.thread_count ?? 1) > 1 && (
 													<span className="shrink-0 text-xs text-kumo-subtle bg-kumo-fill rounded-full px-1.5 py-0.5 font-medium">
 														{email.thread_count}

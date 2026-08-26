@@ -16,5 +16,10 @@ export default [
 		route("settings", "routes/settings.tsx"),
 		route("search", "routes/search-results.tsx"),
 	]),
+	route("crm", "routes/crm.tsx", [
+		index("routes/crm-contacts.tsx"),
+		route("tasks", "routes/crm-tasks.tsx"),
+		route("contacts/:contactId", "routes/crm-contact.tsx"),
+	]),
 	route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

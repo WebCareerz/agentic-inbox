@@ -12,7 +12,7 @@ import {
 	Text,
 	useKumoToastManager,
 } from "@cloudflare/kumo";
-import { EnvelopeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { CheckSquareIcon, EnvelopeIcon, PlusIcon, TrashIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
@@ -160,6 +160,23 @@ export default function HomeRoute() {
 							{domains.join(", ")}
 						</p>
 					)}
+				</div>
+
+				<div className="mb-6 grid grid-cols-2 gap-3">
+					<RouterLink to="/crm" className="flex items-center gap-3 rounded-xl border border-kumo-line bg-kumo-base px-4 py-3 no-underline hover:bg-kumo-tint transition-colors">
+						<UsersThreeIcon size={20} className="text-kumo-brand shrink-0" />
+						<div className="min-w-0">
+							<div className="text-sm font-semibold text-kumo-default">Customers</div>
+							<div className="text-xs text-kumo-subtle">Paid / free contacts</div>
+						</div>
+					</RouterLink>
+					<RouterLink to="/crm/tasks" className="flex items-center gap-3 rounded-xl border border-kumo-line bg-kumo-base px-4 py-3 no-underline hover:bg-kumo-tint transition-colors">
+						<CheckSquareIcon size={20} className="text-kumo-brand shrink-0" />
+						<div className="min-w-0">
+							<div className="text-sm font-semibold text-kumo-default">Tasks</div>
+							<div className="text-xs text-kumo-subtle">Open to-dos from customer email</div>
+						</div>
+					</RouterLink>
 				</div>
 
 				{isLoading ? (

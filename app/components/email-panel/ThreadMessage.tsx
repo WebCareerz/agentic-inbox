@@ -20,6 +20,7 @@ import {
 	stripHtml,
 } from "~/lib/utils";
 import type { Email } from "~/types";
+import ContactActions from "~/components/crm/ContactActions";
 
 interface ThreadMessageProps {
 	email: Email;
@@ -121,6 +122,16 @@ export default function ThreadMessage({
 									{senderLabel}
 								</span>
 								{isDraft && <Badge variant="outline">Draft</Badge>}
+								{!isDraft && !isSelf && (
+									<ContactActions
+										email={email.sender}
+										tier={email.contact_tier}
+										contactId={email.contact_id}
+										hasOpenTask={email.has_open_task}
+										mailboxId={mailboxId}
+										emailId={email.id}
+									/>
+								)}
 							</div>
 							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
 						</div>
