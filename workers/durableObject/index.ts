@@ -739,6 +739,36 @@ export class MailboxDO extends DurableObject<Env> {
 
 	// ── Threading helpers (raw SQL) ────────────────────────────────
 
+	/**
+	 * Resolve a thread from RFC 5322 threading headers: given the Message-IDs
+	 * in an incoming email's In-Reply-To / References, return the thread_id of
+	 * any stored email whose message_id matches. Prefers the most recent match.
+	 */
+	async findThreadByMessageIds(messageIds: string[]): Promise<string | null> {
+		const ids = [...new Set(messageIds.map((id) => id.trim()).filter(Boolean))].slice(0, 50);
+		if (ids.length === 0) return null;
+		const placeholders = ids.map((_, i) => `?${i + 1}`).join(", ");
+		const row = [...this.ctx.storage.sql.exec(
+			`SELECT thread_id FROM emails
+			 WHERE message_id IN (${placeholders})
+			   AND thread_id IS NOT NULL
+			 ORDER BY date DESC
+			 LIMIT 1`,
+			...ids,
+		)][0] as { thread_id: string } | undefined;
+		return row?.thread_id ?? null;
+	}
+
+	/**
+	 * Record the real Message-ID assigned by Cloudflare Email Service after an
+	 * outgoing send resolves, so replies to that message can be threaded.
+	 */
+	async setMessageId(id: string, messageId: string) {
+		const clean = messageId.trim().replace(/^<|>$/g, "");
+		if (!clean) return;
+		this.ctx.storage.sql.exec(`UPDATE emails SET message_id = ?1 WHERE id = ?2`, clean, id);
+	}
+
 	async findThreadBySubject(subject: string, senderAddress?: string): Promise<string | null> {
 		const normalized = subject
 			.replace(/^(?:(?:re|fwd?|fw|aw|wg|r[eé]f|sv)\s*:\s*)+/i, "")

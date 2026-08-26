@@ -207,7 +207,9 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 			to, cc, bcc, from, subject, html, text,
 			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
 			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
+		})
+			.then((sent) => stub.setMessageId(messageId, sent.messageId))
+			.catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
 	);
 	return c.json({ id: messageId, status: "sent" }, 202);
 });
@@ -391,12 +393,16 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 	const extractMsgId = (s: string) => { const m = s.match(/<([^>]+)>/); return m ? m[1] : s.trim().split(/\s+/)[0]; };
 	const inReplyTo = parsedEmail.inReplyTo ? extractMsgId(parsedEmail.inReplyTo) : null;
 	const emailReferences = parsedEmail.references ? parsedEmail.references.split(/\s+/).filter(Boolean).map(extractMsgId) : [];
-	let threadId = emailReferences[0] || inReplyTo || messageId;
-
-	if (!inReplyTo && emailReferences.length === 0) {
-		const subjectThread = await (stub as any).findThreadBySubject(parsedEmail.subject || "", parsedEmail.from?.address || undefined);
-		if (subjectThread) threadId = subjectThread;
+	// Thread resolution: match In-Reply-To / References against stored message_ids
+	// (our own outgoing replies and earlier inbound messages), then fall back to a
+	// subject match, then start a new thread. Raw header IDs are never used as
+	// thread_id directly — thread_ids are internal UUIDs and would never line up.
+	const headerIds = [...(inReplyTo ? [inReplyTo] : []), ...emailReferences];
+	let threadId: string | null = headerIds.length > 0 ? await stub.findThreadByMessageIds(headerIds) : null;
+	if (!threadId) {
+		threadId = await stub.findThreadBySubject(parsedEmail.subject || "", parsedEmail.from?.address || undefined);
 	}
+	if (!threadId) threadId = messageId;
 
 	const originalMessageId = parsedEmail.messageId ? extractMsgId(parsedEmail.messageId) : null;
 
