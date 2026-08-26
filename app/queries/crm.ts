@@ -50,6 +50,16 @@ export function useUpdateContact() {
 	});
 }
 
+export function useBulkUpsertContacts() {
+	const invalidate = useInvalidateCrm();
+	return useMutation({ mutationFn: (contacts: Parameters<typeof api.crmBulkUpsertContacts>[0]) => api.crmBulkUpsertContacts(contacts), onSuccess: invalidate });
+}
+
+export function useImportFromMailboxes() {
+	const invalidate = useInvalidateCrm();
+	return useMutation({ mutationFn: (body: { includeCorporate?: boolean }) => api.crmImportFromMailboxes(body), onSuccess: invalidate });
+}
+
 export function useCreateTask() {
 	const invalidate = useInvalidateCrm();
 	return useMutation({

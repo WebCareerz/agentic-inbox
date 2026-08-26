@@ -2,13 +2,14 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Input, Loader } from "@cloudflare/kumo";
-import { MagnifyingGlassIcon, PlusIcon } from "@phosphor-icons/react";
+import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
+import { DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
+import ImportContactsDialog from "~/components/crm/ImportContactsDialog";
 import TierBadge from "~/components/crm/TierBadge";
-import { useCrmContacts, useUpsertContact } from "~/queries/crm";
+import { useCrmContacts, useImportFromMailboxes, useUpsertContact } from "~/queries/crm";
 
 const TIER_FILTERS = [
 	{ value: "", label: "All classified" },
@@ -21,7 +22,24 @@ export default function CrmContacts() {
 	const [tier, setTier] = useState("");
 	const [q, setQ] = useState("");
 	const [newEmail, setNewEmail] = useState("");
+	const [bulkOpen, setBulkOpen] = useState(false);
+	const [includeCorporate, setIncludeCorporate] = useState(false);
 	const upsert = useUpsertContact();
+	const importMailboxes = useImportFromMailboxes();
+	const toast = useKumoToastManager();
+
+	const runImport = async () => {
+		try {
+			const r = await importMailboxes.mutateAsync({ includeCorporate });
+			toast.add({
+				title: `Scanned ${r.emailsScanned} emails in ${r.mailboxes} mailbox${r.mailboxes === 1 ? "" : "es"}`,
+				description: `${r.contactsCreated} new contacts, ${r.contactsTouched - r.contactsCreated} existing updated, ${r.skipped} skipped`,
+			});
+			if (r.contactsCreated > 0 && !tier) setTier("unknown");
+		} catch (e) {
+			toast.add({ title: (e as Error).message || "Import failed", variant: "error" });
+		}
+	};
 
 	// "" = all classified (exclude unknown) — done client-side since the API filter is exact-match.
 	const params = useMemo(() => ({ ...(tier ? { tier } : {}), ...(q ? { q } : {}), limit: "200" }), [tier, q]);
@@ -54,7 +72,19 @@ export default function CrmContacts() {
 				<div className="flex-1 min-w-[12rem] max-w-sm">
 					<Input size="sm" placeholder="Search email or name" value={q} onChange={(e) => setQ(e.target.value)} />
 				</div>
-				<form onSubmit={addContact} className="flex items-center gap-1 ml-auto">
+				<div className="flex items-center gap-2 ml-auto">
+					<label className="flex items-center gap-1.5 text-xs text-kumo-subtle cursor-pointer select-none">
+						<input type="checkbox" checked={includeCorporate} onChange={(e) => setIncludeCorporate(e.target.checked)} />
+						include corporate
+					</label>
+					<Button type="button" size="sm" variant="secondary" icon={<DownloadSimpleIcon size={14} />} onClick={runImport} loading={importMailboxes.isPending}>
+						Import from mailboxes
+					</Button>
+					<Button type="button" size="sm" variant="secondary" icon={<UploadSimpleIcon size={14} />} onClick={() => setBulkOpen(true)}>
+						Bulk add
+					</Button>
+				</div>
+				<form onSubmit={addContact} className="flex items-center gap-1">
 					<div className="w-56">
 						<Input size="sm" type="email" placeholder="Add contact by email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
 					</div>
@@ -107,6 +137,8 @@ export default function CrmContacts() {
 					</table>
 				</div>
 			)}
+
+			<ImportContactsDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />
 		</div>
 	);
 }

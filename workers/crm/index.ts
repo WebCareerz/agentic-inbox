@@ -45,6 +45,10 @@ export interface RecordEmailInput {
 	emailId: string;
 	threadId?: string | null;
 	subject?: string | null;
+	/** Timestamp of the email (defaults to now). Used for backfills. */
+	at?: string | null;
+	/** Create the contact even for corporate addresses (never for automated ones). */
+	force?: boolean;
 }
 
 export interface ListContactsOptions {
@@ -224,43 +228,72 @@ export class CrmDO extends DurableObject<Env> {
 	 * personal addresses; otherwise just updates last_contact_at if the
 	 * contact already exists. Always logs an activity when a contact exists.
 	 */
-	async recordEmail(input: RecordEmailInput): Promise<{ contactId: string | null; created: boolean }> {
+	async recordEmail(input: RecordEmailInput): Promise<{ contactId: string | null; created: boolean; skipped: boolean }> {
 		const email = normalizeEmail(input.email);
-		if (!email.includes("@")) return { contactId: null, created: false };
+		if (!email.includes("@")) return { contactId: null, created: false, skipped: true };
 		const ts = now();
+		const at = input.at && !Number.isNaN(Date.parse(input.at)) ? new Date(input.at).toISOString() : ts;
 		let contact = await this.getContactByEmail(email);
 		let created = false;
 		if (!contact) {
-			if (!shouldAutoCreateContact(email)) return { contactId: null, created: false };
+			const kind = classifyEmail(email);
+			const allowed = input.force ? kind !== "automated" : shouldAutoCreateContact(email);
+			if (!allowed) return { contactId: null, created: false, skipped: true };
 			contact = {
 				id: crypto.randomUUID(),
 				email,
 				name: input.name?.trim() || null,
 				tier: "unknown",
-				email_kind: classifyEmail(email),
+				email_kind: kind,
 				source: "auto",
 				tags: "[]",
 				notes: null,
 				metadata: "{}",
-				first_seen_at: ts,
-				last_contact_at: ts,
+				first_seen_at: at,
+				last_contact_at: at,
 				created_at: ts,
 				updated_at: ts,
 			};
 			this.db.insert(schema.contacts).values(contact).run();
 			created = true;
 		} else {
-			const patch: Partial<Contact> = { last_contact_at: ts, updated_at: ts };
+			const patch: Partial<Contact> = { updated_at: ts };
+			if (!contact.last_contact_at || contact.last_contact_at < at) patch.last_contact_at = at;
+			if (contact.first_seen_at > at) patch.first_seen_at = at;
 			if (!contact.name && input.name?.trim()) patch.name = input.name.trim();
 			this.db.update(schema.contacts).set(patch).where(eq(schema.contacts.id, contact.id)).run();
 		}
-		this.insertActivity({
-			contact_id: contact.id,
-			type: input.direction === "in" ? "email_in" : "email_out",
-			summary: `${input.direction === "in" ? "Received" : "Sent"}: ${input.subject || "(no subject)"}`,
-			ref: { mailboxId: input.mailboxId, emailId: input.emailId, threadId: input.threadId ?? null },
-		});
-		return { contactId: contact.id, created };
+		// Idempotent: one activity per email (backfills may be re-run).
+		const dup = [...this.ctx.storage.sql.exec(
+			`SELECT 1 FROM activities WHERE contact_id = ?1 AND type IN ('email_in','email_out') AND ref LIKE ?2 LIMIT 1`,
+			contact.id,
+			`%"emailId":${JSON.stringify(input.emailId)}%`,
+		)];
+		if (dup.length === 0) {
+			this.insertActivity({
+				contact_id: contact.id,
+				type: input.direction === "in" ? "email_in" : "email_out",
+				summary: `${input.direction === "in" ? "Received" : "Sent"}: ${input.subject || "(no subject)"}`,
+				ref: { mailboxId: input.mailboxId, emailId: input.emailId, threadId: input.threadId ?? null },
+				at,
+			});
+		}
+		return { contactId: contact.id, created, skipped: false };
+	}
+
+	/** Manual bulk create/update (e.g. paste a list of paying customers). */
+	async bulkUpsertContacts(items: UpsertContactInput[]): Promise<{ created: number; updated: number; failed: { email: string; error: string }[] }> {
+		const result = { created: 0, updated: 0, failed: [] as { email: string; error: string }[] };
+		for (const item of items) {
+			try {
+				const existed = !!(await this.getContactByEmail(item.email));
+				await this.upsertContact(item);
+				if (existed) result.updated++; else result.created++;
+			} catch (e) {
+				result.failed.push({ email: item.email, error: (e as Error).message });
+			}
+		}
+		return result;
 	}
 
 	// ── Tasks ──────────────────────────────────────────────────────
@@ -401,7 +434,7 @@ export class CrmDO extends DurableObject<Env> {
 		return this.insertActivity({ contact_id: contactId, task_id: input.task_id ?? null, type: input.type, summary: input.summary, ref: input.ref ?? {} });
 	}
 
-	private insertActivity(input: { contact_id: string | null; task_id?: string | null; type: string; summary: string; ref: Record<string, unknown> }): Activity {
+	private insertActivity(input: { contact_id: string | null; task_id?: string | null; type: string; summary: string; ref: Record<string, unknown>; at?: string }): Activity {
 		const activity: Activity = {
 			id: crypto.randomUUID(),
 			contact_id: input.contact_id,
@@ -409,7 +442,7 @@ export class CrmDO extends DurableObject<Env> {
 			type: input.type,
 			summary: input.summary.slice(0, 500),
 			ref: JSON.stringify(input.ref ?? {}),
-			created_at: now(),
+			created_at: input.at ?? now(),
 		};
 		this.db.insert(schema.activities).values(activity).run();
 		return activity;

@@ -6,6 +6,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Env } from "../types";
 import {
+	crmBulkUpsertContacts,
+	crmImportFromMailboxes,
 	crmCreateTask,
 	crmDeleteTask,
 	crmGetContact,
@@ -93,6 +95,16 @@ crmRoutes.get("/contacts", async (c) => {
 crmRoutes.get("/contacts/lookup", async (c) => {
 	const emails = (c.req.query("emails") || "").split(",").map((e) => e.trim()).filter(Boolean);
 	return c.json(await crmLookupContacts(c.env, emails));
+});
+
+crmRoutes.post("/contacts/bulk", async (c) => {
+	const body = z.object({ contacts: z.array(ContactUpsertSchema).min(1).max(500) }).parse(await c.req.json());
+	return c.json(await crmBulkUpsertContacts(c.env, body.contacts));
+});
+
+crmRoutes.post("/import", async (c) => {
+	const body = z.object({ includeCorporate: z.boolean().optional(), mailboxId: z.string().optional() }).parse(await c.req.json().catch(() => ({})));
+	return c.json(await crmImportFromMailboxes(c.env, body));
 });
 
 crmRoutes.get("/contacts/by-email/:email", async (c) => {

@@ -10,7 +10,8 @@
 import type { Env } from "../types";
 import type { CrmDO, CreateTaskInput, ListContactsOptions, ListTasksOptions, UpdateTaskInput, UpsertContactInput } from "../crm";
 import { CONTACT_TIERS, TASK_RESOLUTIONS, TASK_STATUSES } from "../db/crm-schema";
-import { getMailboxStub } from "./email-helpers";
+import { getMailboxStub, listMailboxes } from "./email-helpers";
+import { Folders } from "../../shared/folders";
 
 export function getCrmStub(env: Env): DurableObjectStub<CrmDO> {
 	return env.CRM.get(env.CRM.idFromName("crm"));
@@ -56,6 +57,64 @@ export async function crmUpdateContact(env: Env, id: string, patch: Omit<UpsertC
 
 export async function crmLookupContacts(env: Env, emails: string[]) {
 	return getCrmStub(env).getContactsByEmails(emails);
+}
+
+export async function crmBulkUpsertContacts(env: Env, items: UpsertContactInput[]) {
+	for (const item of items) if (item.tier !== undefined) assertTier(item.tier);
+	return getCrmStub(env).bulkUpsertContacts(items);
+}
+
+export interface ImportStats {
+	mailboxes: number;
+	emailsScanned: number;
+	contactsCreated: number;
+	contactsTouched: number;
+	skipped: number;
+}
+
+/**
+ * Backfill contacts from every mailbox's Inbox and Sent folders. Idempotent:
+ * re-running only updates timestamps and never duplicates activities.
+ */
+export async function crmImportFromMailboxes(env: Env, options: { includeCorporate?: boolean; mailboxId?: string } = {}): Promise<ImportStats> {
+	const stats: ImportStats = { mailboxes: 0, emailsScanned: 0, contactsCreated: 0, contactsTouched: 0, skipped: 0 };
+	const crm = getCrmStub(env);
+	const mailboxes = options.mailboxId ? [{ id: options.mailboxId }] : await listMailboxes(env.BUCKET);
+	for (const { id: mailboxId } of mailboxes) {
+		stats.mailboxes++;
+		const stub = getMailboxStub(env, mailboxId);
+		const self = mailboxId.toLowerCase();
+		for (const folder of [Folders.INBOX, Folders.SENT, Folders.ARCHIVE]) {
+			for (let page = 1; page <= 200; page++) {
+				const emails = (await stub.getEmails({ folder, page, limit: 100, sortColumn: "date", sortDirection: "ASC" })) as {
+					id: string; sender?: string | null; recipient?: string | null; subject?: string | null; date?: string | null; thread_id?: string | null; raw_headers?: string | null;
+				}[];
+				if (!emails.length) break;
+				for (const email of emails) {
+					stats.emailsScanned++;
+					const sender = (email.sender || "").toLowerCase();
+					const isOut = sender === self;
+					const party = isOut ? firstAddress(email.recipient) : sender;
+					if (!party || party === self) { stats.skipped++; continue; }
+					const res = await crm.recordEmail({
+						direction: isOut ? "out" : "in",
+						email: party,
+						name: isOut ? null : senderNameFromHeaders(email.raw_headers),
+						mailboxId,
+						emailId: email.id,
+						threadId: email.thread_id ?? null,
+						subject: email.subject ?? "",
+						at: email.date ?? null,
+						force: !!options.includeCorporate,
+					});
+					if (res.skipped) stats.skipped++;
+					else { stats.contactsTouched++; if (res.created) stats.contactsCreated++; }
+				}
+				if (emails.length < 100) break;
+			}
+		}
+	}
+	return stats;
 }
 
 // ── Tasks ──────────────────────────────────────────────────────────
