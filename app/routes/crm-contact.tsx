@@ -69,6 +69,8 @@ function ActivityIcon({ type, summary }: { type: string; summary?: string }) {
 			icon = <ArrowDownLeftIcon size={15} weight="bold" />; cls = "bg-sky-100 text-sky-700"; break;
 		case "email_out":
 			icon = <ArrowUpRightIcon size={15} weight="bold" />; cls = "bg-kumo-tint text-kumo-strong"; break;
+		case "payment":
+			icon = <CrownSimpleIcon size={15} weight="fill" />; cls = "bg-amber-100 text-amber-700"; break;
 		case "tier_change":
 			if (/→ paid|set: paid/.test(summary ?? "")) { icon = <CrownSimpleIcon size={15} weight="fill" />; cls = "bg-amber-100 text-amber-700"; }
 			else { icon = <UserIcon size={15} weight="fill" />; cls = "bg-kumo-tint text-kumo-strong"; }

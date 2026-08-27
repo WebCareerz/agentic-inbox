@@ -178,7 +178,7 @@ const api = {
 		get<CrmContact & { open_tasks: CrmTask[] }>(`/api/v1/crm/contacts/by-email/${encodeURIComponent(email)}`),
 	crmLookupContacts: (emails: string[]) =>
 		get<Record<string, { id: string; tier: string; email_kind: string; name: string | null }>>("/api/v1/crm/contacts/lookup", { params: { emails: emails.join(",") } }),
-	crmUpsertContact: (body: { email: string; tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) =>
+	crmUpsertContact: (body: { email: string; tier?: string; name?: string | null; notes?: string | null; tags?: string[]; metadata?: Record<string, unknown> }) =>
 		post<CrmContact>("/api/v1/crm/contacts", body),
 	crmUpdateContact: (id: string, body: { tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) =>
 		patch<CrmContact>(`/api/v1/crm/contacts/${id}`, body),
@@ -193,6 +193,8 @@ const api = {
 	crmUpdateTask: (id: string, body: Partial<Pick<CrmTask, "title" | "description" | "status" | "priority" | "due_at" | "resolution_type" | "resolution_note" | "resolution_ref">>) =>
 		patch<CrmTask>(`/api/v1/crm/tasks/${id}`, body),
 	crmDeleteTask: (id: string) => del<void>(`/api/v1/crm/tasks/${id}`),
+	crmLogActivity: (body: { contact_email?: string | null; contact_id?: string | null; task_id?: string | null; type: string; summary: string; ref?: Record<string, unknown> }) =>
+		post<CrmActivity>("/api/v1/crm/activities", body),
 };
 
 export default api;

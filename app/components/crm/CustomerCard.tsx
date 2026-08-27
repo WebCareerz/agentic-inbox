@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Button, Tooltip } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon, CaretDownIcon, CaretUpIcon, CheckIcon, PencilSimpleIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, CaretDownIcon, CaretUpIcon, CheckIcon, PencilSimpleIcon, PlusIcon, UserPlusIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
@@ -11,6 +11,7 @@ import { useCrmContactByEmail } from "~/queries/crm";
 import type { CrmTask } from "~/types";
 import CompleteTaskDialog from "./CompleteTaskDialog";
 import ContactDialog from "./ContactDialog";
+import CreateCustomerDialog from "./CreateCustomerDialog";
 import TaskDialog, { type TaskDialogState } from "./TaskDialog";
 import TierBadge from "./TierBadge";
 
@@ -23,6 +24,11 @@ interface CustomerCardProps {
 	emailId?: string;
 	/** Default title for a new task. */
 	subject?: string | null;
+	/** Body of the email being viewed — used by "Create customer from this email". */
+	body?: string | null;
+	senderEmail?: string | null;
+	selfEmail?: string | null;
+	threadId?: string | null;
 }
 
 /**
@@ -30,10 +36,11 @@ interface CustomerCardProps {
  * edit, one-click Done), plus edit-contact / add-task / open-page actions.
  * Every change goes through a dialog with an explicit confirm.
  */
-export default function CustomerCard({ email, name, mailboxId, emailId, subject }: CustomerCardProps) {
+export default function CustomerCard({ email, name, mailboxId, emailId, subject, body, senderEmail, selfEmail, threadId }: CustomerCardProps) {
 	const { data: contact, isLoading } = useCrmContactByEmail(email);
 	const [collapsed, setCollapsed] = useState(false);
 	const [contactOpen, setContactOpen] = useState(false);
+	const [createOpen, setCreateOpen] = useState(false);
 	const [taskDialog, setTaskDialog] = useState<TaskDialogState>(null);
 	const [completing, setCompleting] = useState<CrmTask | null>(null);
 
@@ -69,6 +76,11 @@ export default function CustomerCard({ email, name, mailboxId, emailId, subject 
 					<Tooltip content={contact ? "View / edit customer" : "Add as customer"} side="bottom" asChild>
 						<Button type="button" size="xs" shape="square" variant="ghost" icon={<PencilSimpleIcon size={14} />} onClick={() => setContactOpen(true)} aria-label="View or edit customer" />
 					</Tooltip>
+					{body != null && (
+						<Tooltip content="Create customer from this email (reads name, email, payment details)" side="bottom" asChild>
+							<Button type="button" size="xs" shape="square" variant="ghost" icon={<UserPlusIcon size={14} />} onClick={() => setCreateOpen(true)} aria-label="Create customer from this email" />
+						</Tooltip>
+					)}
 					<Tooltip content="New task from this email" side="bottom" asChild>
 						<Button
 							type="button"
@@ -111,6 +123,19 @@ export default function CustomerCard({ email, name, mailboxId, emailId, subject 
 			)}
 
 			<ContactDialog email={contactOpen ? email : null} name={name} onClose={() => setContactOpen(false)} />
+			{body != null && (
+				<CreateCustomerDialog
+					open={createOpen}
+					onClose={() => setCreateOpen(false)}
+					body={body}
+					senderEmail={senderEmail ?? undefined}
+					selfEmails={selfEmail ? [selfEmail] : []}
+					mailboxId={mailboxId}
+					emailId={emailId}
+					threadId={threadId}
+					subject={subject}
+				/>
+			)}
 			<TaskDialog state={taskDialog} onClose={() => setTaskDialog(null)} />
 			<CompleteTaskDialog task={completing} onClose={() => setCompleting(null)} />
 		</div>

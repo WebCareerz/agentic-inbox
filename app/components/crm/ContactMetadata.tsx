@@ -16,9 +16,10 @@ const LABELS: Record<string, string> = {
 	payments_count: "Payments",
 	payment_method: "Payment method",
 	transaction_id: "Transaction ID",
+	order_no: "Order no.",
 	import_source: "Imported from",
 };
-const ORDER = ["product", "amount_paid", "paid_at", "payment_method", "payments_count", "total_paid", "country", "checkout_at", "transaction_id", "customer_id", "import_source"];
+const ORDER = ["product", "amount_paid", "paid_at", "payment_method", "payments_count", "total_paid", "country", "checkout_at", "order_no", "transaction_id", "customer_id", "import_source"];
 
 export function parseMetadata(value: unknown): Record<string, unknown> {
 	if (!value) return {};

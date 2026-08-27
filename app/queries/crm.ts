@@ -55,7 +55,7 @@ export function useCrmTasks(params: Record<string, string>) {
 export function useUpsertContact() {
 	const invalidate = useInvalidateCrm();
 	return useMutation({
-		mutationFn: (body: { email: string; tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) => api.crmUpsertContact(body),
+		mutationFn: (body: Parameters<typeof api.crmUpsertContact>[0]) => api.crmUpsertContact(body),
 		onSuccess: invalidate,
 	});
 }

@@ -195,6 +195,10 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					mailboxId={mailboxId}
 					emailId={lastReceivedMessage?.id ?? email.id}
 					subject={email.subject}
+					body={(lastReceivedMessage ?? email).body ?? ""}
+					senderEmail={(lastReceivedMessage ?? email).sender}
+					selfEmail={currentMailbox?.email}
+					threadId={email.thread_id}
 				/>
 			)}
 
