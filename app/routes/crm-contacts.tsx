@@ -10,10 +10,9 @@ import { formatListDate } from "shared/dates";
 import AddContactDialog from "~/components/crm/AddContactDialog";
 import ConfirmDialog, { type ConfirmRequest } from "~/components/crm/ConfirmDialog";
 import ImportContactsDialog from "~/components/crm/ImportContactsDialog";
+import PageSizeSelect, { usePageSize } from "~/components/crm/PageSizeSelect";
 import TierBadge from "~/components/crm/TierBadge";
 import { useBulkUpsertContacts, useCrmContacts, useImportFromMailboxes } from "~/queries/crm";
-
-const PAGE_SIZE = 50;
 
 const TIER_FILTERS = [
 	{ value: "classified", label: "All classified" },
@@ -25,6 +24,7 @@ const TIER_FILTERS = [
 export default function CrmContacts() {
 	const [tier, setTier] = useState("classified");
 	const [page, setPage] = useState(1);
+	const [PAGE_SIZE, setPageSize] = usePageSize("crm.contacts.pageSize");
 	const [q, setQ] = useState("");
 	const [addOpen, setAddOpen] = useState(false);
 	const [bulkOpen, setBulkOpen] = useState(false);
@@ -49,13 +49,13 @@ export default function CrmContacts() {
 		}
 	};
 
-	const params = useMemo(() => ({ tier, ...(q ? { q } : {}), page: String(page), limit: String(PAGE_SIZE) }), [tier, q, page]);
+	const params = useMemo(() => ({ tier, ...(q ? { q } : {}), page: String(page), limit: String(PAGE_SIZE) }), [tier, q, page, PAGE_SIZE]);
 	const { data, isLoading } = useCrmContacts(params);
 	const contacts = data?.contacts ?? [];
 	const total = data?.total ?? 0;
 
 	// Filter / search change: back to page 1 and clear selection so a stale selection can't be applied blindly.
-	useEffect(() => { setPage(1); setSelected(new Set()); }, [tier, q]);
+	useEffect(() => { setPage(1); setSelected(new Set()); }, [tier, q, PAGE_SIZE]);
 	useEffect(() => { setSelected(new Set()); }, [page]);
 
 	const allSelected = contacts.length > 0 && contacts.every((c) => selected.has(c.email));
@@ -180,10 +180,13 @@ export default function CrmContacts() {
 				</div>
 			)}
 
-			{total > PAGE_SIZE && (
+			{total > 0 && (
 				<div className="flex items-center justify-between gap-3 flex-wrap">
-					<span className="text-xs text-kumo-subtle">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
-					<Pagination page={page} setPage={setPage} perPage={PAGE_SIZE} totalCount={total} />
+					<div className="flex items-center gap-3">
+						<span className="text-xs text-kumo-subtle">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
+						<PageSizeSelect value={PAGE_SIZE} onChange={setPageSize} />
+					</div>
+					{total > PAGE_SIZE && <Pagination page={page} setPage={setPage} perPage={PAGE_SIZE} totalCount={total} />}
 				</div>
 			)}
 

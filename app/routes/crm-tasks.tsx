@@ -10,11 +10,10 @@ import { formatListDate } from "shared/dates";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "~/components/crm/CompleteTaskDialog";
 import ConfirmDialog, { type ConfirmRequest } from "~/components/crm/ConfirmDialog";
 import TaskDialog, { type TaskDialogState } from "~/components/crm/TaskDialog";
+import PageSizeSelect, { usePageSize } from "~/components/crm/PageSizeSelect";
 import TierBadge from "~/components/crm/TierBadge";
 import { taskEmailLink, useCrmTasks, useDeleteTask, useUpdateTask } from "~/queries/crm";
 import type { CrmTask } from "~/types";
-
-const PAGE_SIZE = 50;
 
 const STATUS_FILTERS = [
 	{ value: "open", label: "Open" },
@@ -34,8 +33,9 @@ export default function CrmTasks() {
 	const updateTask = useUpdateTask();
 	const deleteTask = useDeleteTask();
 	const [page, setPage] = useState(1);
-	useEffect(() => { setPage(1); }, [status]);
-	const params = useMemo(() => ({ status, page: String(page), limit: String(PAGE_SIZE) }), [status, page]);
+	const [PAGE_SIZE, setPageSize] = usePageSize("crm.tasks.pageSize");
+	useEffect(() => { setPage(1); }, [status, PAGE_SIZE]);
+	const params = useMemo(() => ({ status, page: String(page), limit: String(PAGE_SIZE) }), [status, page, PAGE_SIZE]);
 	const { data, isLoading } = useCrmTasks(params);
 	const tasks = data?.tasks ?? [];
 	const total = data?.total ?? 0;
@@ -154,10 +154,13 @@ export default function CrmTasks() {
 				</div>
 			)}
 
-			{total > PAGE_SIZE && (
+			{total > 0 && (
 				<div className="flex items-center justify-between gap-3 flex-wrap">
-					<span className="text-xs text-kumo-subtle">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
-					<Pagination page={page} setPage={setPage} perPage={PAGE_SIZE} totalCount={total} />
+					<div className="flex items-center gap-3">
+						<span className="text-xs text-kumo-subtle">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
+						<PageSizeSelect value={PAGE_SIZE} onChange={setPageSize} />
+					</div>
+					{total > PAGE_SIZE && <Pagination page={page} setPage={setPage} perPage={PAGE_SIZE} totalCount={total} />}
 				</div>
 			)}
 
