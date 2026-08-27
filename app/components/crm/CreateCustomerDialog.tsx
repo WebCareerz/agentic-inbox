@@ -2,11 +2,11 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Banner, Button, Dialog, Input, useKumoToastManager } from "@cloudflare/kumo";
-import { CrownSimpleIcon, UserIcon } from "@phosphor-icons/react";
+import { Banner, Button, Input, useKumoToastManager } from "@cloudflare/kumo";
+import { CrownSimpleIcon, UserIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { extractCustomer } from "~/lib/extract-customer";
-import { htmlToPlainText } from "~/lib/utils";
+import { htmlToLayoutText } from "~/lib/utils";
 import { useUpsertContact } from "~/queries/crm";
 import api from "~/services/api";
 import TierBadge from "./TierBadge";
@@ -43,7 +43,7 @@ export default function CreateCustomerDialog({ open, onClose, body, senderEmail,
 	const upsert = useUpsertContact();
 	const extracted = useMemo(() => {
 		if (!open) return null;
-		const text = /<[a-z][\s\S]*>/i.test(body) ? htmlToPlainText(body) : body;
+		const text = /<[a-z][\s\S]*>/i.test(body) ? htmlToLayoutText(body) : body;
 		return extractCustomer(text, { selfEmails, senderEmail });
 	}, [open, body, selfEmails, senderEmail]);
 
@@ -101,11 +101,17 @@ export default function CreateCustomerDialog({ open, onClose, body, senderEmail,
 		}
 	};
 
+	if (!open) return null;
+
+	// Non-modal floating panel (no backdrop) so the email stays readable and scrollable while editing.
 	return (
-		<Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
-			<Dialog size="base" className="p-6">
-				<Dialog.Title className="text-lg font-semibold mb-1">Create customer from this email</Dialog.Title>
-				<p className="text-sm text-kumo-subtle mb-4">
+		<div role="dialog" aria-label="Create customer from this email" className="fixed right-4 bottom-4 z-50 w-[26rem] max-w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto rounded-xl border border-kumo-line bg-kumo-base p-5 shadow-2xl">
+			<div className="flex items-start justify-between gap-2 mb-1">
+				<h2 className="text-base font-semibold text-kumo-default">Create customer from this email</h2>
+				<Button type="button" variant="ghost" shape="square" size="xs" icon={<XIcon size={14} />} onClick={onClose} aria-label="Close" />
+			</div>
+			<div>
+				<p className="text-xs text-kumo-subtle mb-4">
 					{extracted?.looksLikePayment ? "This looks like a payment notification — details below were read from the email, please check them." : "Fields below are guesses from the email body — edit anything that's wrong."}
 				</p>
 				<form onSubmit={submit} className="space-y-4">
@@ -145,7 +151,7 @@ export default function CreateCustomerDialog({ open, onClose, body, senderEmail,
 						<Button type="submit" variant="primary" size="sm" loading={upsert.isPending} disabled={!emailValid}>Save customer</Button>
 					</div>
 				</form>
-			</Dialog>
-		</Dialog.Root>
+			</div>
+		</div>
 	);
 }

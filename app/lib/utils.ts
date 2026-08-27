@@ -71,6 +71,41 @@ export function htmlToPlainText(html: string): string {
 	return (div.textContent || div.innerText || "").trim();
 }
 
+const BLOCK_TAGS = new Set(["P", "DIV", "TR", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "TABLE", "TBODY", "THEAD", "SECTION", "ARTICLE", "HEADER", "FOOTER", "BLOCKQUOTE", "UL", "OL", "PRE", "HR"]);
+const CELL_TAGS = new Set(["TD", "TH"]);
+
+/**
+ * HTML → text that keeps layout boundaries: block elements become line
+ * breaks and table cells are separated by " | ". Use this (not
+ * htmlToPlainText) when parsing label/value tables such as receipts.
+ */
+export function htmlToLayoutText(html: string): string {
+	const sanitized = DOMPurify.sanitize(html);
+	const doc = new DOMParser().parseFromString(`<div>${sanitized}</div>`, "text/html");
+	const out: string[] = [];
+	const walk = (node: Node) => {
+		if (node.nodeType === Node.TEXT_NODE) { out.push((node.textContent || "").replace(/\s+/g, " ")); return; }
+		if (node.nodeType !== Node.ELEMENT_NODE) return;
+		const el = node as HTMLElement;
+		const tag = el.tagName;
+		if (tag === "STYLE" || tag === "SCRIPT" || tag === "HEAD") return;
+		if (tag === "BR") { out.push("\n"); return; }
+		const isBlock = BLOCK_TAGS.has(tag);
+		const isCell = CELL_TAGS.has(tag);
+		if (isBlock) out.push("\n");
+		for (const child of Array.from(el.childNodes)) walk(child);
+		if (isCell) out.push(" | ");
+		if (isBlock) out.push("\n");
+	};
+	walk(doc.body.firstChild as Node);
+	return out.join("")
+		.split("\n")
+		.map((line) => line.replace(/\s*\|\s*/g, " | ").replace(/^\s*\|\s*|\s*\|\s*$/g, "").replace(/[ \t]+/g, " ").trim())
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
 /**
  * Strip all HTML tags from a string.
  */

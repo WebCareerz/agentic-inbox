@@ -30,8 +30,8 @@ function labelValue(lines: string[], label: RegExp): string | undefined {
 		const line = lines[i];
 		const m = line.match(label);
 		if (!m) continue;
-		// "Label: value" on one line, or value on the next non-empty line
-		const inline = line.slice(m.index! + m[0].length).replace(/^[\s:：]+/, "").trim();
+		// "Label: value" / "Label | value" on one line, or value on the next non-empty line
+		const inline = line.slice(m.index! + m[0].length).replace(/^[\s:：|]+/, "").split(" | ")[0].trim();
 		if (inline) return inline;
 		for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
 			const next = lines[j].trim();
@@ -60,7 +60,8 @@ export function extractCustomer(plainText: string, options: { selfEmails?: strin
 	if (labelled && emails.includes(labelled)) { emails.splice(emails.indexOf(labelled), 1); emails.unshift(labelled); }
 
 	const name = labelValue(lines, /^(Customer\s+)?Name\b/i);
-	const orderNo = text.match(/\b(ORD[-_][A-Z0-9]{6,}|#?\d{4,}-\d{4,}|Order\s*(?:No|Number|ID)[^\n:]*[:：]?\s*([A-Z0-9-]{6,}))\b/i)?.[0]?.replace(/^Order\s*(?:No|Number|ID)[^\n:]*[:：]?\s*/i, "");
+	const orderNo = text.match(/\bORD[-_][A-Z0-9]{6,}\b/i)?.[0]
+		?? labelValue(lines, /^Order\s*(?:No\.?|Number|ID)\b/i)?.match(/[A-Z0-9][A-Z0-9_-]{5,}/i)?.[0];
 	const paidAtRaw = labelValue(lines, /^(Date|Paid\s+on|Purchased\s+on)\b/i);
 	const parsedDate = paidAtRaw ? Date.parse(paidAtRaw) : NaN;
 	const paidAt = Number.isNaN(parsedDate) ? undefined : new Date(parsedDate).toISOString();
@@ -74,9 +75,10 @@ export function extractCustomer(plainText: string, options: { selfEmails?: strin
 		if (!m) continue;
 		amount = m[2].replace(",", ".");
 		currency = m[1].startsWith("$") || m[1].startsWith("US") ? "USD" : m[1] === "€" ? "EUR" : "GBP";
-		const inline = lines[i].slice(0, m.index).trim();
-		if (inline && !/^(subtotal|total|tax|amount|price)/i.test(inline)) product = inline;
-		else for (let j = i - 1; j >= Math.max(0, i - 3); j--) { if (lines[j] && !/^(order summary|units?\s*\d+)/i.test(lines[j])) { product = lines[j]; break; } }
+		const inline = lines[i].slice(0, m.index).replace(/\s*\|\s*$/, "").trim();
+		const NOISE = /^(subtotal|total|tax|vat|amount|price|units?\s*\d+|qty|quantity|order summary)/i;
+		if (inline && !NOISE.test(inline)) product = inline;
+		else for (let j = i - 1; j >= Math.max(0, i - 3); j--) { if (lines[j] && !NOISE.test(lines[j])) { product = lines[j]; break; } }
 		break;
 	}
 
