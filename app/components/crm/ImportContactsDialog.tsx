@@ -5,7 +5,7 @@
 import { Banner, Button, Dialog, Input, useKumoToastManager } from "@cloudflare/kumo";
 import { UploadSimpleIcon } from "@phosphor-icons/react";
 import { useMemo, useRef, useState } from "react";
-import { csvToContacts, type CsvContactRow } from "~/lib/csv";
+import { csvToContacts, detectCsvKind, paymentsCsvToContacts, type CsvContactRow, type CsvKind } from "~/lib/csv";
 import { useBulkUpsertContacts } from "~/queries/crm";
 
 interface ImportContactsDialogProps {
@@ -48,8 +48,10 @@ export default function ImportContactsDialog({ open, onClose }: ImportContactsDi
 	const fileRef = useRef<HTMLInputElement>(null);
 	const [mode, setMode] = useState<Mode>("paste");
 	const [text, setText] = useState("");
-	const [csv, setCsv] = useState<{ name: string; rows: CsvContactRow[]; skipped: number; columns: string[] } | null>(null);
-	const [tier, setTier] = useState<"paid" | "free">("paid");
+	const [csv, setCsv] = useState<{ name: string; kind: CsvKind; rows: CsvContactRow[]; skipped: number; columns: string[]; payments?: number } | null>(null);
+	// Paste lists are usually hand-picked paying customers; CSV exports (checkout/customer lists) are not proof of payment.
+	const [tier, setTier] = useState<"paid" | "free" | "keep">("paid");
+	const [protectPaid, setProtectPaid] = useState(true);
 	const [product, setProduct] = useState("");
 	const [error, setError] = useState<string | null>(null);
 
@@ -62,9 +64,19 @@ export default function ImportContactsDialog({ open, onClose }: ImportContactsDi
 	const loadFile = async (file: File) => {
 		setError(null);
 		try {
-			const parsed = csvToContacts(await file.text());
-			if (parsed.contacts.length === 0) throw new Error("No rows with a valid email address found.");
-			setCsv({ name: file.name, rows: parsed.contacts, skipped: parsed.skipped, columns: parsed.columns });
+			const text = await file.text();
+			const kind = detectCsvKind(text);
+			if (kind === "payments") {
+				const parsed = paymentsCsvToContacts(text);
+				if (parsed.contacts.length === 0) throw new Error("No paid rows with a valid customer email found.");
+				setCsv({ name: file.name, kind, rows: parsed.contacts, skipped: parsed.unpaidRows, columns: parsed.columns, payments: parsed.payments });
+				setTier("paid"); // payments are proof of payment
+			} else {
+				const parsed = csvToContacts(text);
+				if (parsed.contacts.length === 0) throw new Error("No rows with a valid email address found.");
+				setCsv({ name: file.name, kind, rows: parsed.contacts, skipped: parsed.skipped, columns: parsed.columns });
+				setTier("free"); // customer / checkout lists are not proof of payment
+			}
 		} catch (e) {
 			setCsv(null);
 			setError((e as Error).message || "Could not read the CSV file.");
@@ -75,15 +87,18 @@ export default function ImportContactsDialog({ open, onClose }: ImportContactsDi
 		setError(null);
 		const productName = product.trim();
 		try {
-			const res = await bulk.mutateAsync(rows.map((r) => ({
+			const res = await bulk.mutateAsync({ protectPaid: tier === "free" && protectPaid, contacts: rows.map((r) => ({
 				email: r.email,
 				name: r.name ?? null,
-				tier,
+				...(tier === "keep" ? {} : { tier }),
 				...(Object.keys(r.metadata).length || productName
 					? { metadata: { ...r.metadata, ...(productName ? { product: productName } : {}), ...(mode === "csv" ? { import_source: csv?.name } : {}) } }
 					: {}),
-			})));
-			toast.add({ title: `${res.created} created, ${res.updated} updated${res.failed.length ? `, ${res.failed.length} failed` : ""}` });
+			})) });
+			toast.add({
+				title: `${res.created} created, ${res.updated} updated${res.failed.length ? `, ${res.failed.length} failed` : ""}`,
+				...(res.protectedPaid ? { description: `${res.protectedPaid} existing paid contact${res.protectedPaid === 1 ? "" : "s"} kept as paid` } : {}),
+			});
 			if (res.failed.length) setError(res.failed.map((f) => `${f.email}: ${f.error}`).join("; "));
 			else close();
 		} catch (e) {
@@ -108,19 +123,28 @@ export default function ImportContactsDialog({ open, onClose }: ImportContactsDi
 					<div className="flex items-center gap-3 flex-wrap">
 						<div className="flex items-center gap-1 rounded-lg border border-kumo-line bg-kumo-base p-1 w-fit">
 							{(["paste", "csv"] as const).map((m) => (
-								<button key={m} type="button" onClick={() => { setMode(m); setError(null); }} className={`rounded-md px-3 py-1 text-sm ${mode === m ? "bg-kumo-fill font-semibold text-kumo-default" : "text-kumo-strong hover:bg-kumo-tint"}`}>
+								<button key={m} type="button" onClick={() => { setMode(m); setError(null); setTier(m === "csv" ? "free" : "paid"); }} className={`rounded-md px-3 py-1 text-sm ${mode === m ? "bg-kumo-fill font-semibold text-kumo-default" : "text-kumo-strong hover:bg-kumo-tint"}`}>
 									{m === "paste" ? "Paste list" : "CSV file"}
 								</button>
 							))}
 						</div>
 						<div className="flex items-center gap-1 rounded-lg border border-kumo-line bg-kumo-base p-1 w-fit">
-							{(["paid", "free"] as const).map((t) => (
-								<button key={t} type="button" onClick={() => setTier(t)} className={`rounded-md px-3 py-1 text-sm capitalize ${tier === t ? "bg-kumo-fill font-semibold text-kumo-default" : "text-kumo-strong hover:bg-kumo-tint"}`}>
-									Mark as {t}
+							{([["paid", "Mark as paid"], ["free", "Mark as free"], ["keep", "Keep tier"]] as const).map(([t, label]) => (
+								<button key={t} type="button" onClick={() => setTier(t)} className={`rounded-md px-3 py-1 text-sm ${tier === t ? "bg-kumo-fill font-semibold text-kumo-default" : "text-kumo-strong hover:bg-kumo-tint"}`}>
+									{label}
 								</button>
 							))}
 						</div>
+						{tier === "free" && (
+							<label className="flex items-center gap-1.5 text-xs text-kumo-subtle cursor-pointer select-none">
+								<input type="checkbox" checked={protectPaid} onChange={(e) => setProtectPaid(e.target.checked)} />
+								don't downgrade existing Paid contacts
+							</label>
+						)}
 					</div>
+					{mode === "csv" && tier === "paid" && csv?.kind !== "payments" && (
+						<Banner variant="alert" text="Customer / checkout exports usually include people who never paid. Only mark as paid if this file comes from a payments or orders report." />
+					)}
 
 					{mode === "paste" ? (
 						<textarea
@@ -138,9 +162,18 @@ export default function ImportContactsDialog({ open, onClose }: ImportContactsDi
 								<Button type="button" size="sm" variant="secondary" icon={<UploadSimpleIcon size={14} />} onClick={() => fileRef.current?.click()}>
 									{csv ? "Choose another file" : "Choose CSV file"}
 								</Button>
-								{csv && <span className="text-xs text-kumo-subtle truncate">{csv.name} · {csv.rows.length} contacts{csv.skipped ? `, ${csv.skipped} rows skipped` : ""}</span>}
+								{csv && (
+									<span className="text-xs text-kumo-subtle truncate">
+										{csv.name} · <strong className="text-kumo-default">{csv.kind === "payments" ? "Payments export" : "Customers export"}</strong> · {csv.rows.length} contacts
+										{csv.kind === "payments" && csv.payments ? ` from ${csv.payments} paid payments` : ""}
+										{csv.skipped ? `, ${csv.skipped} rows skipped${csv.kind === "payments" ? " (not paid)" : ""}` : ""}
+									</span>
+								)}
 							</div>
-							<p className="text-xs text-kumo-subtle">Needs an <code>Email</code> column. <code>Name</code>, <code>Country</code>, <code>Created Date</code> (stored as paid date) and <code>Customer ID</code> are recognised; other columns are kept as extra fields.</p>
+							<p className="text-xs text-kumo-subtle">
+								<strong>Customers export</strong> (Email, Name, Country, Created Date, Customer ID): contacts default to <strong>Free</strong>, created date is stored as checkout date.<br />
+								<strong>Payments export</strong> (Customer Email, Status, Amount, Date, Product…): only <code>paid</code> rows are used, contacts are marked <strong>Paid</strong> with amount, method, date and transaction ID.
+							</p>
 							{csv && (
 								<div className="rounded-md border border-kumo-line overflow-x-auto max-h-56 overflow-y-auto">
 									<table className="w-full text-xs">
@@ -173,7 +206,7 @@ export default function ImportContactsDialog({ open, onClose }: ImportContactsDi
 						<span className="text-xs text-kumo-subtle">{rows.length} contact{rows.length === 1 ? "" : "s"} ready</span>
 						<div className="flex gap-2">
 							<Button type="button" variant="ghost" size="sm" onClick={close} disabled={bulk.isPending}>Cancel</Button>
-							<Button type="button" variant="primary" size="sm" onClick={submit} loading={bulk.isPending} disabled={rows.length === 0}>Import {rows.length || ""} as {tier}</Button>
+							<Button type="button" variant="primary" size="sm" onClick={submit} loading={bulk.isPending} disabled={rows.length === 0}>Import {rows.length || ""}{tier === "keep" ? "" : ` as ${tier}`}</Button>
 						</div>
 					</div>
 				</div>

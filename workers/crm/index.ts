@@ -9,7 +9,7 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import * as schema from "../db/crm-schema";
 import type { Env } from "../types";
@@ -30,6 +30,7 @@ export interface ContactSummary {
 	last_contact_at?: string | null;
 	country?: string | null;
 	paid_at?: string | null;
+	checkout_at?: string | null;
 	open_task_count: number;
 }
 
@@ -150,7 +151,8 @@ export class CrmDO extends DurableObject<Env> {
 		const page = Math.max(options.page ?? 1, 1);
 		const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
 		const conditions: SQL[] = [];
-		if (tier) conditions.push(eq(schema.contacts.tier, tier));
+		if (tier === "classified") conditions.push(ne(schema.contacts.tier, "unknown"));
+		else if (tier) conditions.push(eq(schema.contacts.tier, tier));
 		if (kind) conditions.push(eq(schema.contacts.email_kind, kind));
 		if (q) {
 			const pattern = `%${q.trim().toLowerCase()}%`;
@@ -169,6 +171,7 @@ export class CrmDO extends DurableObject<Env> {
 				last_contact_at: schema.contacts.last_contact_at,
 				country: sql<string | null>`json_extract(${schema.contacts.metadata}, '$.country')`,
 				paid_at: sql<string | null>`json_extract(${schema.contacts.metadata}, '$.paid_at')`,
+				checkout_at: sql<string | null>`json_extract(${schema.contacts.metadata}, '$.checkout_at')`,
 				open_task_count: openCount,
 			})
 			.from(schema.contacts)
@@ -287,13 +290,23 @@ export class CrmDO extends DurableObject<Env> {
 	}
 
 	/** Manual bulk create/update (e.g. paste a list of paying customers). */
-	async bulkUpsertContacts(items: UpsertContactInput[]): Promise<{ created: number; updated: number; failed: { email: string; error: string }[] }> {
-		const result = { created: 0, updated: 0, failed: [] as { email: string; error: string }[] };
+	async bulkUpsertContacts(
+		items: UpsertContactInput[],
+		options: { protectPaid?: boolean } = {},
+	): Promise<{ created: number; updated: number; protectedPaid: number; failed: { email: string; error: string }[] }> {
+		const result = { created: 0, updated: 0, protectedPaid: 0, failed: [] as { email: string; error: string }[] };
 		for (const item of items) {
 			try {
-				const existed = !!(await this.getContactByEmail(item.email));
-				await this.upsertContact(item);
-				if (existed) result.updated++; else result.created++;
+				const existing = await this.getContactByEmail(item.email);
+				let patch = item;
+				// Never silently downgrade a paying customer during a bulk import.
+				if (options.protectPaid && existing?.tier === "paid" && item.tier && item.tier !== "paid") {
+					const { tier: _tier, ...rest } = item;
+					patch = rest;
+					result.protectedPaid++;
+				}
+				await this.upsertContact(patch);
+				if (existing) result.updated++; else result.created++;
 			} catch (e) {
 				result.failed.push({ email: item.email, error: (e as Error).message });
 			}

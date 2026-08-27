@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Dialog, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
+import { Badge, Button, Dialog, Input, Loader, Pagination, useKumoToastManager } from "@cloudflare/kumo";
 import { CrownSimpleIcon, DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon, UploadSimpleIcon, UserIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
@@ -13,15 +13,18 @@ import ImportContactsDialog from "~/components/crm/ImportContactsDialog";
 import TierBadge from "~/components/crm/TierBadge";
 import { useBulkUpsertContacts, useCrmContacts, useImportFromMailboxes } from "~/queries/crm";
 
+const PAGE_SIZE = 50;
+
 const TIER_FILTERS = [
-	{ value: "", label: "All classified" },
+	{ value: "classified", label: "All classified" },
 	{ value: "paid", label: "Paid" },
 	{ value: "free", label: "Free" },
 	{ value: "unknown", label: "Unclassified" },
 ];
 
 export default function CrmContacts() {
-	const [tier, setTier] = useState("");
+	const [tier, setTier] = useState("classified");
+	const [page, setPage] = useState(1);
 	const [q, setQ] = useState("");
 	const [addOpen, setAddOpen] = useState(false);
 	const [bulkOpen, setBulkOpen] = useState(false);
@@ -40,19 +43,20 @@ export default function CrmContacts() {
 				title: `Scanned ${r.emailsScanned} emails in ${r.mailboxes} mailbox${r.mailboxes === 1 ? "" : "es"}`,
 				description: `${r.contactsCreated} new contacts, ${r.contactsTouched - r.contactsCreated} existing updated, ${r.skipped} skipped`,
 			});
-			if (r.contactsCreated > 0 && !tier) setTier("unknown");
+			if (r.contactsCreated > 0) setTier("unknown");
 		} catch (e) {
 			toast.add({ title: (e as Error).message || "Import failed", variant: "error" });
 		}
 	};
 
-	// "" = all classified (exclude unknown) — done client-side since the API filter is exact-match.
-	const params = useMemo(() => ({ ...(tier ? { tier } : {}), ...(q ? { q } : {}), limit: "200" }), [tier, q]);
+	const params = useMemo(() => ({ tier, ...(q ? { q } : {}), page: String(page), limit: String(PAGE_SIZE) }), [tier, q, page]);
 	const { data, isLoading } = useCrmContacts(params);
-	const contacts = useMemo(() => (data?.contacts ?? []).filter((c) => tier || c.tier !== "unknown"), [data, tier]);
+	const contacts = data?.contacts ?? [];
+	const total = data?.total ?? 0;
 
-	// Clear selection when the filter changes so a stale selection can't be applied blindly.
-	useEffect(() => { setSelected(new Set()); }, [tier, q]);
+	// Filter / search change: back to page 1 and clear selection so a stale selection can't be applied blindly.
+	useEffect(() => { setPage(1); setSelected(new Set()); }, [tier, q]);
+	useEffect(() => { setSelected(new Set()); }, [page]);
 
 	const allSelected = contacts.length > 0 && contacts.every((c) => selected.has(c.email));
 	const toggleAll = () => setSelected(allSelected ? new Set() : new Set(contacts.map((c) => c.email)));
@@ -75,7 +79,7 @@ export default function CrmContacts() {
 			),
 			confirmLabel: `Mark as ${next}`,
 			onConfirm: async () => {
-				const r = await bulk.mutateAsync(emails.map((email) => ({ email, tier: next })));
+				const r = await bulk.mutateAsync({ contacts: emails.map((email) => ({ email, tier: next })) });
 				toast.add({ title: `${r.created + r.updated} contact${r.created + r.updated === 1 ? "" : "s"} marked as ${next}` });
 				setSelected(new Set());
 			},
@@ -115,7 +119,7 @@ export default function CrmContacts() {
 
 			{selected.size > 0 && (
 				<div className="flex items-center gap-2 rounded-lg border border-kumo-brand/30 bg-kumo-brand/5 px-3 py-2">
-					<span className="text-sm text-kumo-default font-medium">{selected.size} selected</span>
+					<span className="text-sm text-kumo-default font-medium">{selected.size} selected on this page</span>
 					<Button type="button" size="sm" variant="primary" icon={<UserIcon size={14} />} onClick={() => applyTier("free")} loading={bulk.isPending}>Mark as Free</Button>
 					<Button type="button" size="sm" variant="secondary" icon={<CrownSimpleIcon size={14} />} onClick={() => applyTier("paid")} disabled={bulk.isPending}>Mark as Paid</Button>
 					<Button type="button" size="sm" variant="ghost" icon={<XIcon size={14} />} onClick={() => setSelected(new Set())} disabled={bulk.isPending}>Clear</Button>
@@ -143,7 +147,7 @@ export default function CrmContacts() {
 								<th className="px-3 py-2 text-left font-medium">Contact</th>
 								<th className="px-4 py-2 text-left font-medium">Tier</th>
 								<th className="px-4 py-2 text-left font-medium hidden md:table-cell">Country</th>
-								<th className="px-4 py-2 text-left font-medium hidden lg:table-cell">Paid</th>
+								<th className="px-4 py-2 text-left font-medium hidden lg:table-cell">Paid / Checkout</th>
 								<th className="px-4 py-2 text-left font-medium hidden md:table-cell">Kind</th>
 								<th className="px-4 py-2 text-left font-medium">Open tasks</th>
 								<th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Last contact</th>
@@ -163,7 +167,7 @@ export default function CrmContacts() {
 									</td>
 									<td className="px-4 py-2.5"><TierBadge tier={c.tier} size="md" /></td>
 									<td className="px-4 py-2.5 hidden md:table-cell text-kumo-strong">{c.country || <span className="text-kumo-subtle">—</span>}</td>
-									<td className="px-4 py-2.5 hidden lg:table-cell text-kumo-subtle">{c.paid_at ? formatListDate(c.paid_at) : "—"}</td>
+									<td className="px-4 py-2.5 hidden lg:table-cell text-kumo-subtle">{c.paid_at ? formatListDate(c.paid_at) : c.checkout_at ? <span title="Reached checkout, no payment recorded">{formatListDate(c.checkout_at)} · checkout</span> : "—"}</td>
 									<td className="px-4 py-2.5 hidden md:table-cell text-kumo-subtle capitalize">{c.email_kind}</td>
 									<td className="px-4 py-2.5">
 										{c.open_task_count > 0 ? <Badge variant="secondary">{c.open_task_count}</Badge> : <span className="text-kumo-subtle">—</span>}
@@ -173,6 +177,13 @@ export default function CrmContacts() {
 							))}
 						</tbody>
 					</table>
+				</div>
+			)}
+
+			{total > PAGE_SIZE && (
+				<div className="flex items-center justify-between gap-3 flex-wrap">
+					<span className="text-xs text-kumo-subtle">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
+					<Pagination page={page} setPage={setPage} perPage={PAGE_SIZE} totalCount={total} />
 				</div>
 			)}
 

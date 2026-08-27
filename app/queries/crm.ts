@@ -70,7 +70,10 @@ export function useUpdateContact() {
 
 export function useBulkUpsertContacts() {
 	const invalidate = useInvalidateCrm();
-	return useMutation({ mutationFn: (contacts: Parameters<typeof api.crmBulkUpsertContacts>[0]) => api.crmBulkUpsertContacts(contacts), onSuccess: invalidate });
+	return useMutation({
+		mutationFn: ({ contacts, protectPaid }: { contacts: Parameters<typeof api.crmBulkUpsertContacts>[0]; protectPaid?: boolean }) => api.crmBulkUpsertContacts(contacts, { protectPaid }),
+		onSuccess: invalidate,
+	});
 }
 
 export function useImportFromMailboxes() {

@@ -98,8 +98,8 @@ crmRoutes.get("/contacts/lookup", async (c) => {
 });
 
 crmRoutes.post("/contacts/bulk", async (c) => {
-	const body = z.object({ contacts: z.array(ContactUpsertSchema).min(1).max(500) }).parse(await c.req.json());
-	return c.json(await crmBulkUpsertContacts(c.env, body.contacts));
+	const body = z.object({ contacts: z.array(ContactUpsertSchema).min(1).max(500), protectPaid: z.boolean().optional() }).parse(await c.req.json());
+	return c.json(await crmBulkUpsertContacts(c.env, body.contacts, { protectPaid: body.protectPaid }));
 });
 
 crmRoutes.post("/import", async (c) => {

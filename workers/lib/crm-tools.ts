@@ -59,9 +59,9 @@ export async function crmLookupContacts(env: Env, emails: string[]) {
 	return getCrmStub(env).getContactsByEmails(emails);
 }
 
-export async function crmBulkUpsertContacts(env: Env, items: UpsertContactInput[]) {
+export async function crmBulkUpsertContacts(env: Env, items: UpsertContactInput[], options: { protectPaid?: boolean } = {}) {
 	for (const item of items) if (item.tier !== undefined) assertTier(item.tier);
-	return getCrmStub(env).bulkUpsertContacts(items);
+	return getCrmStub(env).bulkUpsertContacts(items, options);
 }
 
 export interface ImportStats {

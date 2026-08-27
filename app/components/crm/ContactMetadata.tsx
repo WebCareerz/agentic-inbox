@@ -7,12 +7,18 @@ import { formatListDate } from "shared/dates";
 /** Friendly labels for well-known metadata keys; anything else is shown with its raw key. */
 const LABELS: Record<string, string> = {
 	country: "Country",
+	checkout_at: "Checkout at",
 	paid_at: "Paid at",
 	customer_id: "Customer ID",
 	product: "Product",
+	amount_paid: "Amount paid",
+	total_paid: "Total paid",
+	payments_count: "Payments",
+	payment_method: "Payment method",
+	transaction_id: "Transaction ID",
 	import_source: "Imported from",
 };
-const ORDER = ["product", "country", "paid_at", "customer_id", "import_source"];
+const ORDER = ["product", "amount_paid", "paid_at", "payment_method", "payments_count", "total_paid", "country", "checkout_at", "transaction_id", "customer_id", "import_source"];
 
 export function parseMetadata(value: unknown): Record<string, unknown> {
 	if (!value) return {};

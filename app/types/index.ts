@@ -84,6 +84,7 @@ export interface CrmContactSummary {
 	last_contact_at?: string | null;
 	country?: string | null;
 	paid_at?: string | null;
+	checkout_at?: string | null;
 	open_task_count: number;
 }
 

@@ -2,9 +2,9 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Button, Loader, Tooltip, useKumoToastManager } from "@cloudflare/kumo";
+import { Button, Loader, Pagination, Tooltip, useKumoToastManager } from "@cloudflare/kumo";
 import { ArrowSquareOutIcon, ArrowCounterClockwiseIcon, CheckIcon, CheckSquareIcon, PencilSimpleIcon, ProhibitIcon, TrashIcon } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { formatListDate } from "shared/dates";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "~/components/crm/CompleteTaskDialog";
@@ -13,6 +13,8 @@ import TaskDialog, { type TaskDialogState } from "~/components/crm/TaskDialog";
 import TierBadge from "~/components/crm/TierBadge";
 import { taskEmailLink, useCrmTasks, useDeleteTask, useUpdateTask } from "~/queries/crm";
 import type { CrmTask } from "~/types";
+
+const PAGE_SIZE = 50;
 
 const STATUS_FILTERS = [
 	{ value: "open", label: "Open" },
@@ -31,9 +33,12 @@ export default function CrmTasks() {
 	const [editing, setEditing] = useState<TaskDialogState>(null);
 	const updateTask = useUpdateTask();
 	const deleteTask = useDeleteTask();
-	const params = useMemo(() => ({ status, limit: "200" }), [status]);
+	const [page, setPage] = useState(1);
+	useEffect(() => { setPage(1); }, [status]);
+	const params = useMemo(() => ({ status, page: String(page), limit: String(PAGE_SIZE) }), [status, page]);
 	const { data, isLoading } = useCrmTasks(params);
 	const tasks = data?.tasks ?? [];
+	const total = data?.total ?? 0;
 
 	const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -146,6 +151,13 @@ export default function CrmTasks() {
 							</div>
 						);
 					})}
+				</div>
+			)}
+
+			{total > PAGE_SIZE && (
+				<div className="flex items-center justify-between gap-3 flex-wrap">
+					<span className="text-xs text-kumo-subtle">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
+					<Pagination page={page} setPage={setPage} perPage={PAGE_SIZE} totalCount={total} />
 				</div>
 			)}
 
