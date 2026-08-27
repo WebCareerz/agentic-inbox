@@ -27,6 +27,9 @@ export interface ContactSummary {
 	name: string | null;
 	tier: string;
 	email_kind: string;
+	last_contact_at?: string | null;
+	country?: string | null;
+	paid_at?: string | null;
 	open_task_count: number;
 }
 
@@ -164,6 +167,8 @@ export class CrmDO extends DurableObject<Env> {
 				tier: schema.contacts.tier,
 				email_kind: schema.contacts.email_kind,
 				last_contact_at: schema.contacts.last_contact_at,
+				country: sql<string | null>`json_extract(${schema.contacts.metadata}, '$.country')`,
+				paid_at: sql<string | null>`json_extract(${schema.contacts.metadata}, '$.paid_at')`,
 				open_task_count: openCount,
 			})
 			.from(schema.contacts)

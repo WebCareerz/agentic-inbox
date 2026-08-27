@@ -82,6 +82,8 @@ export interface CrmContactSummary {
 	tier: string;
 	email_kind: string;
 	last_contact_at?: string | null;
+	country?: string | null;
+	paid_at?: string | null;
 	open_task_count: number;
 }
 

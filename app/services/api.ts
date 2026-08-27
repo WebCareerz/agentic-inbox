@@ -182,7 +182,7 @@ const api = {
 		post<CrmContact>("/api/v1/crm/contacts", body),
 	crmUpdateContact: (id: string, body: { tier?: string; name?: string | null; notes?: string | null; tags?: string[] }) =>
 		patch<CrmContact>(`/api/v1/crm/contacts/${id}`, body),
-	crmBulkUpsertContacts: (contacts: { email: string; tier?: string; name?: string | null; notes?: string | null }[]) =>
+	crmBulkUpsertContacts: (contacts: { email: string; tier?: string; name?: string | null; notes?: string | null; metadata?: Record<string, unknown> }[]) =>
 		post<{ created: number; updated: number; failed: { email: string; error: string }[] }>("/api/v1/crm/contacts/bulk", { contacts }),
 	crmImportFromMailboxes: (body: { includeCorporate?: boolean }) =>
 		post<{ mailboxes: number; emailsScanned: number; contactsCreated: number; contactsTouched: number; skipped: number }>("/api/v1/crm/import", body),

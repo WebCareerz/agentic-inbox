@@ -10,6 +10,7 @@ import { formatListDate } from "shared/dates";
 import { useCrmContactByEmail, useUpsertContact } from "~/queries/crm";
 import type { CrmTask } from "~/types";
 import TaskDialog, { type TaskDialogState } from "./TaskDialog";
+import ContactMetadata from "./ContactMetadata";
 import TierBadge from "./TierBadge";
 
 interface ContactDialogProps {
@@ -110,6 +111,7 @@ export default function ContactDialog({ email, name, onClose }: ContactDialogPro
 									<dt className="text-kumo-subtle">Open tasks</dt><dd className="text-kumo-default">{openTasks.length}</dd>
 								</dl>
 							)}
+							{contact && <ContactMetadata metadata={contact.metadata} className="rounded-md border border-kumo-line bg-kumo-tint/30 p-3" />}
 							{openTasks.length > 0 && (
 								<ul className="divide-y divide-kumo-line rounded-md border border-kumo-line">
 									{openTasks.map((t) => (

@@ -142,6 +142,8 @@ export default function CrmContacts() {
 								</th>
 								<th className="px-3 py-2 text-left font-medium">Contact</th>
 								<th className="px-4 py-2 text-left font-medium">Tier</th>
+								<th className="px-4 py-2 text-left font-medium hidden md:table-cell">Country</th>
+								<th className="px-4 py-2 text-left font-medium hidden lg:table-cell">Paid</th>
 								<th className="px-4 py-2 text-left font-medium hidden md:table-cell">Kind</th>
 								<th className="px-4 py-2 text-left font-medium">Open tasks</th>
 								<th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Last contact</th>
@@ -160,6 +162,8 @@ export default function CrmContacts() {
 										</RouterLink>
 									</td>
 									<td className="px-4 py-2.5"><TierBadge tier={c.tier} size="md" /></td>
+									<td className="px-4 py-2.5 hidden md:table-cell text-kumo-strong">{c.country || <span className="text-kumo-subtle">—</span>}</td>
+									<td className="px-4 py-2.5 hidden lg:table-cell text-kumo-subtle">{c.paid_at ? formatListDate(c.paid_at) : "—"}</td>
 									<td className="px-4 py-2.5 hidden md:table-cell text-kumo-subtle capitalize">{c.email_kind}</td>
 									<td className="px-4 py-2.5">
 										{c.open_task_count > 0 ? <Badge variant="secondary">{c.open_task_count}</Badge> : <span className="text-kumo-subtle">—</span>}

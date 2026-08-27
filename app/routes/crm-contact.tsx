@@ -10,6 +10,7 @@ import { formatListDate } from "shared/dates";
 import CompleteTaskDialog, { RESOLUTION_OPTIONS } from "~/components/crm/CompleteTaskDialog";
 import ConfirmDialog, { type ConfirmRequest } from "~/components/crm/ConfirmDialog";
 import TaskDialog, { type TaskDialogState } from "~/components/crm/TaskDialog";
+import ContactMetadata from "~/components/crm/ContactMetadata";
 import TierBadge from "~/components/crm/TierBadge";
 import { taskEmailLink, useCrmContact, useUpdateContact } from "~/queries/crm";
 import type { CrmActivity, CrmTask } from "~/types";
@@ -146,6 +147,7 @@ export default function CrmContactDetail() {
 						<dt className="text-kumo-subtle">First seen</dt><dd className="text-kumo-default">{formatListDate(contact.first_seen_at)}</dd>
 						<dt className="text-kumo-subtle">Last contact</dt><dd className="text-kumo-default">{contact.last_contact_at ? formatListDate(contact.last_contact_at) : "—"}</dd>
 					</dl>
+					<ContactMetadata metadata={contact.metadata} className="mt-3 border-t border-kumo-line pt-3" />
 				</div>
 
 				<div className="rounded-xl border border-kumo-line bg-kumo-base p-5 space-y-3">
