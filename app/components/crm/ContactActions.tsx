@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Button, Tooltip } from "@cloudflare/kumo";
-import { PencilSimpleIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, PencilSimpleIcon, PlusIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router";
 import ContactDialog from "./ContactDialog";
@@ -50,9 +50,11 @@ export default function ContactActions({ email, name, tier, contactId, mailboxId
 				</Tooltip>
 			)}
 			{contactId && (
-				<RouterLink to={`/crm/contacts/${contactId}`} className="text-xs text-kumo-link hover:text-kumo-link-hover ml-1">
-					CRM
-				</RouterLink>
+				<Tooltip content="Open customer page" side="bottom" asChild>
+					<RouterLink to={`/crm/contacts/${contactId}`} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default" aria-label="Open customer page">
+						<ArrowSquareOutIcon size={14} />
+					</RouterLink>
+				</Tooltip>
 			)}
 			<ContactDialog email={contactOpen ? email : null} name={name} onClose={() => setContactOpen(false)} />
 			<TaskDialog state={taskDialog} onClose={() => setTaskDialog(null)} />
