@@ -64,7 +64,7 @@ export default function CustomerCard({ email, name, mailboxId, emailId, subject,
 				<div className="min-w-0 flex-1 flex items-center gap-2">
 					<span className="text-sm font-medium text-kumo-default truncate">{displayName}</span>
 					{displayName !== email && <span className="text-xs text-kumo-subtle truncate hidden sm:inline">{email}</span>}
-					<TierBadge tier={contact?.tier} />
+					<TierBadge tier={contact?.tier} showUnknown />
 					{!contact && <span className="text-xs text-kumo-subtle">not a contact yet</span>}
 					{openTasks.length > 0 && collapsed && (
 						<button type="button" onClick={() => setCollapsed(false)} className="text-xs text-kumo-brand font-medium hover:underline">

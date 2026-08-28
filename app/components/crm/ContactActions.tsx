@@ -32,7 +32,7 @@ export default function ContactActions({ email, name, tier, contactId, mailboxId
 
 	return (
 		<div className="flex items-center gap-1 flex-wrap">
-			<TierBadge tier={tier} />
+			<TierBadge tier={tier} showUnknown={!!contactId} />
 			<Tooltip content={contactId ? "View / edit customer" : "Add as customer"} side="bottom" asChild>
 				<Button type="button" variant="ghost" shape="square" size="xs" icon={<PencilSimpleIcon size={14} />} onClick={() => setContactOpen(true)} aria-label="View or edit customer" />
 			</Tooltip>
