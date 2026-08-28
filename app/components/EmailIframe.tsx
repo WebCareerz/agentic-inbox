@@ -97,12 +97,41 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 			<\/script>`
 			: "";
 
+		// Link / form behaviour inside the sandbox:
+		// - every link opens in a new tab (never navigates the app away)
+		// - forms can't submit (no allow-forms, by design); "button links" in
+		//   marketing emails are usually GET forms, so open their action URL instead.
+		const navScript = `<script>
+			document.addEventListener("click", function (e) {
+				var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+				if (a) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+			}, true);
+			document.addEventListener("submit", function (e) {
+				e.preventDefault();
+				var form = e.target;
+				var action = form && form.getAttribute("action");
+				if (!action || !/^https?:/i.test(action)) return;
+				var method = (form.getAttribute("method") || "get").toLowerCase();
+				var url = action;
+				if (method === "get") {
+					try {
+						var u = new URL(action);
+						var data = new FormData(form);
+						data.forEach(function (v, k) { if (typeof v === "string") u.searchParams.append(k, v); });
+						url = u.toString();
+					} catch (_) {}
+				}
+				window.open(url, "_blank", "noopener");
+			}, true);
+		<\/script>`;
+
 		// Use srcdoc so the iframe is truly sandboxed (no same-origin access).
 		// We can't use doc.write() because that requires allow-same-origin.
 		iframe.srcdoc = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<base target="_blank">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid: https:; script-src 'unsafe-inline';">
 <style>
@@ -148,7 +177,7 @@ h1, h2, h3 { margin: 8px 0 4px; }
 ul, ol { padding-left: 20px; margin: 4px 0; }
 </style>
 </head>
-<body>${cleanBody}${heightScript}</body>
+<body>${cleanBody}${navScript}${heightScript}</body>
 </html>`;
 	}, [body, autoSize]);
 
@@ -157,7 +186,7 @@ ul, ol { padding-left: 20px; margin: 4px 0; }
 			ref={iframeRef}
 			className="block w-full border-0"
 			style={autoSize ? { height: `${height}px` } : { height: "100%" }}
-			sandbox="allow-scripts allow-popups allow-top-navigation-by-user-activation"
+			sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
 			title="Email content"
 		/>
 	);
