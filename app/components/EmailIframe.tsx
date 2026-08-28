@@ -73,14 +73,27 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		// the parent page — it can only postMessage.
 		const heightScript = autoSize
 			? `<script>
+				var lastH = 0;
 				function reportHeight() {
-					var h = document.body.scrollHeight;
-					if (h > 0) parent.postMessage({ __emailIframeHeight: true, height: h }, "*");
+					var h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+					if (h > 0 && h !== lastH) { lastH = h; parent.postMessage({ __emailIframeHeight: true, height: h }, "*"); }
 				}
 				reportHeight();
 				setTimeout(reportHeight, 50);
 				setTimeout(reportHeight, 150);
 				setTimeout(reportHeight, 400);
+				setTimeout(reportHeight, 1500);
+				// Images (inline attachments, remote) finish after the first paint — re-measure as each one lands.
+				window.addEventListener("load", reportHeight);
+				var imgs = document.images;
+				for (var i = 0; i < imgs.length; i++) {
+					imgs[i].addEventListener("load", reportHeight);
+					imgs[i].addEventListener("error", reportHeight);
+				}
+				// Catch anything else that changes layout (fonts, late CSS, collapsing quotes).
+				if (typeof ResizeObserver !== "undefined") {
+					new ResizeObserver(reportHeight).observe(document.body);
+				}
 			<\/script>`
 			: "";
 
