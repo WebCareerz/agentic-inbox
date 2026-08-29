@@ -299,15 +299,21 @@ export class MailboxDO extends DurableObject<Env> {
 				WHERE folder_id = (SELECT id FROM folders WHERE name = ?1 OR id = ?1 LIMIT 1)
 			),
 			thread_to_conversation AS (
-				SELECT
-					raw_thread_id,
-					normalized_subject,
-					CASE
-						WHEN thread_id IS NOT NULL THEN raw_thread_id
-						ELSE MIN(raw_thread_id) OVER (PARTITION BY normalized_subject)
-					END as conversation_id
-				FROM folder_emails
-				GROUP BY raw_thread_id, normalized_subject, thread_id
+				-- Exactly one row per raw_thread_id. A thread whose messages have
+				-- slightly different normalized subjects must not produce two rows,
+				-- or the later JOIN duplicates every email (doubling thread_count).
+				SELECT raw_thread_id, MIN(conversation_id) as conversation_id
+				FROM (
+					SELECT
+						raw_thread_id,
+						CASE
+							WHEN thread_id IS NOT NULL THEN raw_thread_id
+							ELSE MIN(raw_thread_id) OVER (PARTITION BY normalized_subject)
+						END as conversation_id
+					FROM folder_emails
+					GROUP BY raw_thread_id, normalized_subject, thread_id
+				)
+				GROUP BY raw_thread_id
 			),
 			all_emails_with_conversation AS (
 				SELECT
