@@ -206,16 +206,42 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 		]),
 	}, attachmentData);
 
-	c.executionCtx.waitUntil(
+	const recordInCrm = () =>
 		getCrmStub(c.env).recordEmail({ direction: "out", email: (Array.isArray(to) ? to[0] : to) || "", mailboxId, emailId: messageId, threadId: thread_id || in_reply_to || messageId, subject })
-			.catch((e) => console.error("CRM record (send) failed:", (e as Error).message)),
-	);
-	c.executionCtx.waitUntil(
+			.catch((e) => console.error("CRM record (send) failed:", (e as Error).message));
+	const deliver = () =>
 		sendEmail(c.env.EMAIL, {
 			to, cc, bcc, from, subject, html, text,
 			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
 			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		})
+		});
+
+	// ?wait=1 — synchronous mode for API callers (e.g. license delivery): only
+	// respond once Cloudflare Email Service has accepted the message. On failure
+	// the Sent record is removed so the mailbox never shows a phantom send.
+	// This confirms acceptance, not final delivery (bounces arrive later).
+	if (boolQuery(c, "wait")) {
+		try {
+			const sent = await deliver();
+			await stub.setMessageId(messageId, sent.messageId);
+			c.executionCtx.waitUntil(recordInCrm());
+			return c.json({ id: messageId, messageId: sent.messageId, status: "accepted" }, 200);
+		} catch (e) {
+			const message = (e as Error).message || "Email delivery failed";
+			console.error("Synchronous email delivery failed:", message);
+			try {
+				const atts = await stub.deleteEmail(messageId);
+				if (atts && atts.length > 0) await c.env.BUCKET.delete(atts.map((att) => `attachments/${messageId}/${att.id}/${att.filename}`));
+			} catch (cleanupErr) {
+				console.error("Failed to clean up unsent email record:", (cleanupErr as Error).message);
+			}
+			return c.json({ id: messageId, status: "failed", error: message }, 502);
+		}
+	}
+
+	c.executionCtx.waitUntil(recordInCrm());
+	c.executionCtx.waitUntil(
+		deliver()
 			.then((sent) => stub.setMessageId(messageId, sent.messageId))
 			.catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
 	);
