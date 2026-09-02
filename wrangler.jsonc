@@ -13,11 +13,12 @@
 		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
 		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 		// The worker now fails closed outside local development if Access is not configured.
-		"DOMAINS": "timelinevisualizer.net,elfnames.wiki",
+		"DOMAINS": "timelinevisualizer.net,elfnames.wiki,heartopia.live",
 		"EMAIL_ADDRESSES": [
 			"support@timelinevisualizer.net",
 			"hi@elfnames.wiki",
-			"support@elfnames.wiki"
+			"support@elfnames.wiki",
+			"support@heartopia.live"
 		],
 		// Set to "true" to have the AI agent auto-draft a reply for every incoming email.
 		"AUTO_DRAFT": "false"
