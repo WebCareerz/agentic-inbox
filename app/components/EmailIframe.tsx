@@ -59,12 +59,27 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		const iframe = iframeRef.current;
 		if (!iframe || !body) return;
 
+		// Keep <style> blocks: dark email templates set their colors there, and
+		// stripping them leaves light text on our white background. Styles are
+		// scoped to this opaque-origin sandboxed iframe, so they can't leak.
 		const cleanBody = DOMPurify.sanitize(body, {
 			USE_PROFILES: { html: true },
-			FORBID_TAGS: ["style"],
 			ADD_ATTR: ["target"],
 			FORCE_BODY: true,
 		});
+
+		// The original <body>'s background/bgcolor is lost when the content is
+		// re-wrapped in our skeleton — carry it over so dark templates keep
+		// their ground color.
+		let bodyStyle = "";
+		const bodyTag = body.match(/<body\b[^>]*>/i)?.[0] ?? "";
+		const styleAttr = bodyTag.match(/style\s*=\s*("([^"]*)"|'([^']*)')/i);
+		if (styleAttr) bodyStyle = (styleAttr[2] ?? styleAttr[3] ?? "").replace(/[<>{}]/g, "");
+		else {
+			const bgAttr = bodyTag.match(/bgcolor\s*=\s*("([^"]*)"|'([^']*)'|([#\w]+))/i);
+			const bg = (bgAttr?.[2] ?? bgAttr?.[3] ?? bgAttr?.[4] ?? "").replace(/[^#()%,.\w\s-]/g, "");
+			if (bg) bodyStyle = `background: ${bg}`;
+		}
 
 		const padding = autoSize ? "0" : "24px";
 
@@ -177,7 +192,7 @@ h1, h2, h3 { margin: 8px 0 4px; }
 ul, ol { padding-left: 20px; margin: 4px 0; }
 </style>
 </head>
-<body>${cleanBody}${navScript}${heightScript}</body>
+<body${bodyStyle ? ` style="${bodyStyle.replace(/"/g, "'")}"` : ""}>${cleanBody}${navScript}${heightScript}</body>
 </html>`;
 	}, [body, autoSize]);
 
